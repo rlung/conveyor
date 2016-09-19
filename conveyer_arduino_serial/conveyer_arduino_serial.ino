@@ -47,6 +47,7 @@
 #include "Waveform.h"
 #define DELIM ","               // Delimiter used for serial outputs
 #define STEPSCALE 2             // Scale factor to convert tracking to stepper
+#define STEPCODE 53
 
 
 // Pins
@@ -63,6 +64,7 @@ const int trackPinB   = 3;
 // Output codes
 const int code_end = 0;
 const int code_conveyer_steps = 1;
+const int code_track_end = 2;
 const int code_next_trial = 3;
 const int code_trial_onset = 4;
 const int code_session_length = 6;
@@ -73,17 +75,21 @@ const int code_solenoid_onset = 10;
 const int code_solenoid_offset = 11;
 
 // Variables via serial
+unsigned int csplusNum;
+unsigned int csminusNum;
 unsigned long preSession;
 unsigned long postSession;
-int trialNum;
+unsigned int trialNum;
 unsigned long trialDur;
 boolean uniformDistro;
 unsigned long meanITI;
 unsigned long minITI;
 unsigned long maxITI;
 unsigned long tsEnd;
-int csDur;                  // Duration (ms) of one whisker stimulation
-int csFreq;                 // Frequency of piezo bender
+unsigned int csplusDur;             // Duration (ms) of one whisker stimulation
+unsigned int csplusFreq;                 // Frequency of piezo bender
+unsigned int csminusDur;
+unsigned int csminusFreq;
 int solDur;
 boolean imageAll;
 int trackPeriod;
@@ -91,6 +97,7 @@ int trackPeriod;
 // Other variables
 unsigned long sampleDelay;
 unsigned long* trials;          // Pointer to array for DMA; initialized later
+boolean* csplus_trials;
 volatile int trackChange = 0;   // Rotations within tracking epochs
 
 
@@ -122,25 +129,30 @@ void endSession(unsigned long ts) {
 
 // Retrieve parameters from serial
 void updateParams() {
-  const int paramNum = 13;
+  const int paramNum = 16;
   unsigned long parameters[paramNum];
   for (int p = 0; p < paramNum; p++) {
     parameters[p] = Serial.parseInt();
   }
 
-  preSession      = parameters[0];
-  postSession     = parameters[1];
-  trialNum        = parameters[2];
-  trialDur        = parameters[3];
-  uniformDistro   = parameters[4];
-  meanITI         = parameters[5];
-  minITI          = parameters[6];
-  maxITI          = parameters[7];
-  csDur           = parameters[8];
-  csFreq          = parameters[9];
-  solDur          = parameters[10];
-  imageAll        = parameters[11];
-  trackPeriod     = parameters[12];
+  csplusNum       = parameters[0];
+  csminusNum      = parameters[1];
+  preSession      = parameters[2];
+  postSession     = parameters[3];
+  trialDur        = parameters[4];
+  uniformDistro   = parameters[5];
+  meanITI         = parameters[6];
+  minITI          = parameters[7];
+  maxITI          = parameters[8];
+  csplusDur       = parameters[9];
+  csplusFreq      = parameters[10];
+  csminusDur      = parameters[11];
+  csminusFreq     = parameters[12];
+  solDur          = parameters[13];
+  imageAll        = parameters[14];
+  trackPeriod     = parameters[15];
+
+  trialNum = csplusNum + csminusNum;
 }
 
 
@@ -194,6 +206,28 @@ void genTrials() {
 }
 
 
+void shufflePlusMinus() {
+  // Shuffle CS+ & CS- trials
+  // Create array of 'true' & 'false' with amount corresponding to CS+ & CS- 
+  // trials. Shuffle created array to randomize presentation of CS+ & CS- 
+  // trials.
+
+  // Boolean array with: number of "true" == number of CS+ trials (csplusNum)
+  for (int tt = 0; tt < trialNum; tt++) {
+    if (tt < csplusNum) csplus_trials[tt] = true;
+    else csplus_trials[tt] = false;
+  }
+
+  // Shuffle boolean array
+  for (int tt = 0; tt < trialNum - 1; tt++) {
+    int rr = random(tt, trialNum - 1);
+    boolean temp = csplus_trials[tt];
+    csplus_trials[tt] = csplus_trials[rr];
+    csplus_trials[rr] = temp;
+  }
+}
+
+
 void waitForStart() {
   const byte code_end = '0';
   const byte code_start = 'E';
@@ -236,7 +270,11 @@ void setup() {
   // Create trials
   trials = new () unsigned long[trialNum];  // Allocate memory
   genTrials();
-  tsEnd = trials[trialNum-1] + trialDur;
+  tsEnd = trials[trialNum-1] + trialDur + postSession;
+
+  // Shuffle CS+ & CS- trials
+  csplus_trials = new () boolean[trialNum];
+  shufflePlusMinus();
 
   // Wait for start signal
   Serial.println("Waiting for start signal ('E').");
@@ -274,7 +312,6 @@ void loop() {
   static boolean imaging = false;       // Indicates imaging TTL state
   static boolean stimming = false;      // Indicates stimming state
   static boolean resetConveyer;
-  static const byte stepCode = 51;      // Code to signal slave--should be number not attainable by other bytes sent
 
   static int trialLicks;
   static const int trialLicksLimit = 5;
@@ -299,18 +336,19 @@ void loop() {
       Serial.print(DELIM);
       Serial.println(trackOutVal);
 
-      if (inTrial && 
+      if (inTrial &&
+          csplus_trials[nextTrial] &&
           trackOutVal > 0 &&
           !digitalRead(railStopPin)) {
-        // The number of steps on the motor is proportional to the distance moved
-        // from tracking. The speed is set so that the number of steps will take
-        // the amount of time between each read of track value (ie, trackPeriod).
+        // Number of steps on the motor is proportional to distance moved from
+        // tracking. Speed is set so time steps take will equal amount of time
+        // between each read of track value (ie, trackPeriod).
 
         byte steps2take = trackOutVal >> STEPSCALE;
         
         // Speed calculation based on 50-ms track interval and 200 steps/rotation.
         // Calculation: rot/min = steps(steps2take) / interval(50ms) * 60000 ms/min / steps/rot(200)
-        // Max number of steps in constrained by byte max (255) and max allowed 
+        // Max number of steps is constrained by byte max (255) and max allowed 
         // for step speed (assuming speed = steps * 6 thus 255/6 = 42).
         byte stepSpeed = steps2take * 6;
         
@@ -325,7 +363,7 @@ void loop() {
         Serial.print(DELIM);
         Serial.println(steps2take);
 
-        Serial1.write(stepCode);
+        Serial1.write(STEPCODE);
         Serial1.write(stepSpeed);
         Serial1.write(steps2take);
       }
@@ -374,7 +412,12 @@ void loop() {
       }
 
       // Tone to start trial
-      tone(csPin, csFreq, csDur);
+      if (csplus_trials[nextTrial]) {
+        tone(csPin, csplusFreq, csplusDur);
+      }
+      else {
+        tone(csPin, csminusFreq, csminusDur);
+      }
 
       // Print trial start time
       Serial.print(code_trial_onset);
@@ -434,7 +477,7 @@ void loop() {
         Serial.print(DELIM);
         Serial.println(255);
 
-        Serial1.write(stepCode);
+        Serial1.write(STEPCODE);
         Serial1.write(255);
         Serial1.write(255);
         

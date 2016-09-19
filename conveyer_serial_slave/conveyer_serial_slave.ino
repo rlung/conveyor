@@ -9,6 +9,7 @@ Uses serial protocol to communicate with "master" arduino to obtain parameters.
 
 
 #include <Stepper.h>
+#define STEPCODE 53
 Stepper trackStepper(200, 8, 9, 10, 11);
 
 void setup() {
@@ -16,10 +17,9 @@ void setup() {
 }
 
 void loop() {
-  static const byte stepCode = 51;
   
   if (Serial.available() >= 3){
-    if (Serial.read() != stepCode) {
+    if (Serial.read() != STEPCODE) {
       return;
     }
     byte speed = Serial.read();
