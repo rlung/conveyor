@@ -7,44 +7,12 @@
 // Parameters for session are received via serial connection and Python GUI. 
 // Data from hardware is routed directly back via serial connection to Python 
 // GUI for recording and calculations. 
-// 
-// Parameters from serial:
-//  0: csplus_num
-//  1: csminus_num
-//  2: presession
-//  3: postsession
-//  4: prestim
-//  5: poststim
-//  6: uniformDistro
-//  7: meanITI
-//  8: minITI
-//  9: maxITI
-// 10: csplus_dur
-// 11: csplus_freq
-// 12: csminus_dur
-// 13: csminus_freq
-// 14: imaging TTL
-//
-// Output codes:
-//  0: End session
-//  1: Onset of stimulation
-//  2: Offset of stimulation
-//  3: Time to start of next trial, planned (used to mark next trial time)
-//  4: Time of CS+ trial start, actual (used as recorded trial time)
-//  5: Time of CS- trial start, actual
-//  6: Length of session
-//  7: Tracking values
-//  8: Lick onset timestamp
-//  9: Lick offset timestamp
-// 10: Solenoid onset timestamp
-// 11: Solenoid offset timestamp
-//
-// Input (serial) codes:
-//  0 (48): End session
-//  E (69): Start session
 
 
 #include "Waveform.h"
+#define IMGPINDUR 100
+#define ENDCODE 48
+#define STARTCODE 69
 #define DELIM ","               // Delimiter used for serial outputs
 #define STEPSCALE 2             // Scale factor to convert tracking to stepper
 #define STEPCODE 53
@@ -54,8 +22,6 @@
 const int imgStartPin = 6;
 const int imgStopPin  = 7;
 const int csPin = 4;
-const int lickPin = 5;
-const int solPin = 8;
 const int railStartPin = 9;
 const int railStopPin = 10;
 const int trackPinA   = 2;
@@ -69,10 +35,6 @@ const int code_next_trial = 3;
 const int code_trial_onset = 4;
 const int code_session_length = 6;
 const int code_track = 7;
-const int code_lick_onset = 8;
-const int code_lick_offset = 9;
-const int code_solenoid_onset = 10;
-const int code_solenoid_offset = 11;
 
 // Variables via serial
 unsigned int csplusNum;
@@ -90,9 +52,8 @@ unsigned int csplusDur;             // Duration (ms) of one whisker stimulation
 unsigned int csplusFreq;                 // Frequency of piezo bender
 unsigned int csminusDur;
 unsigned int csminusFreq;
-int solDur;
 boolean imageAll;
-int trackPeriod;
+unsigned int trackPeriod;
 
 // Other variables
 unsigned long sampleDelay;
@@ -129,7 +90,7 @@ void endSession(unsigned long ts) {
 
 // Retrieve parameters from serial
 void updateParams() {
-  const int paramNum = 16;
+  const int paramNum = 15;
   unsigned long parameters[paramNum];
   for (int p = 0; p < paramNum; p++) {
     parameters[p] = Serial.parseInt();
@@ -148,9 +109,8 @@ void updateParams() {
   csplusFreq      = parameters[10];
   csminusDur      = parameters[11];
   csminusFreq     = parameters[12];
-  solDur          = parameters[13];
-  imageAll        = parameters[14];
-  trackPeriod     = parameters[15];
+  imageAll        = parameters[13];
+  trackPeriod     = parameters[14];
 
   trialNum = csplusNum + csminusNum;
 }
@@ -235,9 +195,9 @@ void waitForStart() {
   while (1) {
     byte reading = Serial.read();
     switch(reading) {
-      case 48:
+      case ENDCODE:
         endSession(0);
-      case 69:
+      case STARTCODE:
         return;   // Start session
     }
   }
@@ -252,7 +212,6 @@ void setup() {
   // Set pins
   pinMode(imgStartPin, OUTPUT);
   pinMode(imgStopPin, OUTPUT);
-  pinMode(solPin, OUTPUT);
   pinMode(railStartPin, INPUT);
   pinMode(railStopPin, INPUT);
   pinMode(trackPinA, INPUT);
@@ -298,32 +257,49 @@ void setup() {
 
 void loop() {
   // Record start of session
-  static unsigned long start = millis();
+  static const unsigned long start = millis();
 
   // Variables
   static unsigned long imgStartTS;      // Timestamp pin was last on
   static unsigned long imgStopTS;
-  static const int imgPinDur = 100;     // Druation of imaging TTL to scope
-  static const int trackPeriod = 50;
   static unsigned long nextTrackTS = trackPeriod;
-  static int nextTrial;
+  static unsigned int nextTrial;
   static boolean running = true;        // Indicates trials are still in process
   static boolean inTrial = false;       // Indicates if within trial
   static boolean imaging = false;       // Indicates imaging TTL state
   static boolean stimming = false;      // Indicates stimming state
   static boolean resetConveyer;
 
-  static int trialLicks;
-  static const int trialLicksLimit = 5;
-
   // Get timestamp of current loop
   unsigned long ts = millis() - start;
 
   // Turn off events.
-  if (ts >= imgStartTS + imgPinDur) digitalWrite(imgStartPin, LOW);
-  if (ts >= imgStopTS + imgPinDur) digitalWrite(imgStopPin, LOW);
+  if (ts >= imgStartTS + IMGPINDUR) digitalWrite(imgStartPin, LOW);
+  if (ts >= imgStopTS + IMGPINDUR) digitalWrite(imgStopPin, LOW);
 
-  // -- 0. TRACK MOVEMENT -- //
+  // -- 0. SERIAL SCAN -- //
+  if (Serial.available() > 0) {
+    // Watch for information from computer.
+    byte reading = Serial.read();
+    switch(reading) {
+      case ENDCODE:
+        endSession(ts);
+        break;
+    }
+  }
+
+  if (Serial1.available() > 0) {
+    // Tranmit step data from Arduino slave.
+    if (Serial.read() == STEPCODE) {  // Throw out first byte
+      Serial.print(code_conveyer_steps);
+      Serial.print(DELIM);
+      Serial.print(ts);
+      Serial.print(DELIM);
+      Serial.println(Serial1.read());
+    }
+  }
+
+  // -- 1. TRACK MOVEMENT -- //
   if (ts >= nextTrackTS) {
     int trackOutVal = trackChange;
     trackChange = 0;
@@ -356,43 +332,15 @@ void loop() {
           steps2take = 42;
           stepSpeed = 255;
         }
-        
-        Serial.print(code_conveyer_steps);
-        Serial.print(DELIM);
-        Serial.print(ts);
-        Serial.print(DELIM);
-        Serial.println(steps2take);
 
         Serial1.write(STEPCODE);
-        Serial1.write(stepSpeed);
+        Serial1.write(trackPeriod);
         Serial1.write(steps2take);
       }
     }
     
     // Reset timer
     nextTrackTS = nextTrackTS + trackPeriod;   // Increment nextTrackTS.
-  }
-
-  // -- 1. SERIAL SCAN -- //
-  if (Serial.available() > 0) {
-    byte reading = Serial.read();
-    switch(reading) {
-      case 48:
-        endSession(ts);
-        break;
-    }
-  }
-
-  if (Serial1.available() > 0) {
-    static String serialMsg;
-
-    char serialRecv = Serial1.read();
-    serialMsg += serialRecv;
-
-    if (serialRecv == '\n') {
-      Serial.print(serialMsg);
-      serialMsg = "";
-    }
   }
 
   // -- 2. SESSION TIMING -- //
@@ -413,10 +361,10 @@ void loop() {
 
       // Tone to start trial
       if (csplus_trials[nextTrial]) {
-        tone(csPin, csplusFreq, csplusDur);
+//        tone(csPin, csplusFreq, csplusDur);
       }
       else {
-        tone(csPin, csminusFreq, csminusDur);
+//        tone(csPin, csminusFreq, csminusDur);
       }
 
       // Print trial start time
@@ -426,11 +374,9 @@ void loop() {
     }
 
     // End of trial
-    // Ends on either time limit or lick limit.
+    // Ends on either time limit.
     else if (inTrial && 
-             (ts >= (trials[nextTrial] + trialDur) ||
-              trialLicks >= trialLicksLimit)) {
-      trialLicks = 0;
+             ts >= (trials[nextTrial] + trialDur)) {
       inTrial = false;
       resetConveyer = true;
       
@@ -485,51 +431,5 @@ void loop() {
       }
     }
   }
-
-  // -- 4. LICKING -- //
-  static boolean lickPrev;
-  static boolean solenoidOn;
-  static unsigned long solTS;
-
-  // Record lick state
-  boolean lick = digitalRead(lickPin);
-
-  // Turn off solenoid after set time
-  if (solenoidOn & (ts >= solTS + solDur) ) {
-    solenoidOn = false;
-    digitalWrite(solPin, LOW);
-
-    Serial.print(code_solenoid_offset);
-    Serial.print(DELIM);
-    Serial.println(ts);
-  }
-
-  // Record licks
-  if (lick & !lickPrev) {
-    Serial.print(code_lick_onset);
-    Serial.print(DELIM);
-    Serial.println(ts);
-
-    // Record trial lick
-    if (inTrial) trialLicks++;
-
-    if (inTrial &&
-        !solenoidOn) {
-      solenoidOn = true;
-      solTS = ts;
-      digitalWrite(solPin, HIGH);
-
-      Serial.print(code_solenoid_onset);
-      Serial.print(DELIM);
-      Serial.println(ts);
-    }
-  }
-  else if (!lick & lickPrev) {
-    Serial.print(code_lick_offset);
-    Serial.print(DELIM);
-    Serial.println(ts);
-  }
-
-  lickPrev = lick;
 }
 
