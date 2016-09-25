@@ -51,14 +51,14 @@ if (Serial.available() >= 3){
     return;
   }
   byte interval = Serial.read();
-  byte steps = Serial.read();
+  byte steps    = Serial.read();
   
   // Values for moving backwards
   // Wire doesn't transmit negative values. Resetting conveyers must
   // be encoded differently (eg, 255, 255).
   if (interval == 0) {
     int speed = 180;
-    int step = -25;
+    int steps = -25;
   }
   else {
     // Speed calculation based on 50-ms track interval and 200 steps/rotation.
@@ -69,7 +69,7 @@ if (Serial.available() >= 3){
 
     // Relay confirmation data was received
     Serial.write(STEPCODE);
-    Serial.write(step);
+    Serial.write(steps);
   }
 
   trackStepper.setSpeed(speed);

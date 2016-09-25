@@ -30,7 +30,7 @@ const int trackPinB   = 3;
 // Output codes
 const int code_end = 0;
 const int code_conveyer_steps = 1;
-const int code_track_end = 2;
+const int code_rail_end = 2;
 const int code_next_trial = 3;
 const int code_trial_onset = 4;
 const int code_session_length = 6;
@@ -124,12 +124,15 @@ void genTrials() {
   // Timestamp of last trial during trial list creation. Initially defined as
   // delay to first trial (preSession).
   unsigned long lastTrial = preSession;
-  
+
+  // Set first trial at 0
+  trials[0] = preSession;
+
   if (uniformDistro) {
     // Create ITIs with a uniform distribution
     // All ITIs are the same value defined by meanITI
 
-    for (int tt = 0; tt < trialNum; tt++) {
+    for (int tt = 1; tt < trialNum; tt++) {
       trials[tt] = lastTrial + meanITI;
       lastTrial = trials[tt];
     }
@@ -148,7 +151,7 @@ void genTrials() {
     float randFactor;
     unsigned long ITI;
 
-    for (int tt = 0; tt < trialNum; tt++) {
+    for (int tt = 1; tt < trialNum; tt++) {
       // randFactor is calculated exponential function of u with integral [0, 1] 
       // approximately equal to 1 for large maxITI/meanITI and small 
       // minITI/meanITI. Thus average value is approximately 1 with max value 
@@ -265,9 +268,10 @@ void loop() {
   static unsigned long nextTrackTS = trackPeriod;
   static unsigned int nextTrial;
   static boolean running = true;        // Indicates trials are still in process
-  static boolean inTrial = false;       // Indicates if within trial
-  static boolean imaging = false;       // Indicates imaging TTL state
-  static boolean stimming = false;      // Indicates stimming state
+  static boolean inTrial;               // Indicates if within trial
+  static boolean imaging;               // Indicates imaging TTL state
+  static boolean stimming;              // Indicates stimming state
+  static boolean endOfTrack;            // Indicates end of conveyer track reached
   static boolean resetConveyer;
 
   // Get timestamp of current loop
@@ -277,6 +281,7 @@ void loop() {
   if (ts >= imgStartTS + IMGPINDUR) digitalWrite(imgStartPin, LOW);
   if (ts >= imgStopTS + IMGPINDUR) digitalWrite(imgStopPin, LOW);
 
+  // -- SESSION CONTROL -- //
   // -- 0. SERIAL SCAN -- //
   if (Serial.available() > 0) {
     // Watch for information from computer.
@@ -300,6 +305,18 @@ void loop() {
   }
 
   // -- 1. TRACK MOVEMENT -- //
+  if (inTrial &&
+      !endOfTrack &&
+      digitalRead(railStopPin)) {
+    // End of track reached
+    endOfTrack = true;
+
+    // Relay to computer
+    Serial.print(code_rail_end);
+    Serial.print(DELIM);
+    Serial.println(ts);
+  }
+
   if (ts >= nextTrackTS) {
     int trackOutVal = trackChange;
     trackChange = 0;
@@ -315,7 +332,7 @@ void loop() {
       if (inTrial &&
           csplus_trials[nextTrial] &&
           trackOutVal > 0 &&
-          !digitalRead(railStopPin)) {
+          !endOfTrack) {
         // Number of steps on the motor is proportional to distance moved from
         // tracking. Speed is set so time steps take will equal amount of time
         // between each read of track value (ie, trackPeriod).
@@ -373,11 +390,15 @@ void loop() {
       Serial.println(ts);
     }
 
+    // End of track reached
+    if (digitalRead())
+
     // End of trial
     // Ends on either time limit.
     else if (inTrial && 
              ts >= (trials[nextTrial] + trialDur)) {
       inTrial = false;
+      endOfTrack = false;
       resetConveyer = true;
       
       if (!imageAll && imaging) {
@@ -413,19 +434,15 @@ void loop() {
   static unsigned long nextResetTS;
   
   if (resetConveyer) {
-    // Stop when end of rail reached
+    // Stop when start of rail reached
     if (digitalRead(railStartPin)) {
       resetConveyer = false;
     }
     else {
       if (ts >= nextResetTS) {
-        Serial.print(255);
-        Serial.print(DELIM);
-        Serial.println(255);
-
         Serial1.write(STEPCODE);
-        Serial1.write(255);
-        Serial1.write(255);
+        Serial1.write(0);
+        Serial1.write(0);
         
         nextResetTS = ts + trackPeriod;
       }
