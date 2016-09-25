@@ -68,7 +68,7 @@ if (Serial.available() >= 3){
     int speed = steps * 300/interval;
 
     // Relay confirmation data was received
-    Serial.write(STEPCODE);
+    Serial.write((byte)STEPCODE);
     Serial.write(steps);
   }
 

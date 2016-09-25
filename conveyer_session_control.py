@@ -42,11 +42,9 @@ with open(key_file, 'r') as kf:
 class InputManager(object):
 
     def __init__(self, parent):
-        # LAYOUT
+        # GUI layout
         # parent
         # - parameter_frame
-        #   + slack_frame
-        #   + serial_frame
         #   + session_frame
         #     ~ core_session_frame
         #       - trial_frame
@@ -57,8 +55,12 @@ class InputManager(object):
         #         + minmax_frame
         #       - imaging_frame
         #   + start_frame
+        #   + serial_frame
+        #   + slack_frame
         # - monitor_frame
+        #   + (figure)
         #   + scoreboard_frame
+        #   + legend_frame
 
         entry_width = 10
 
@@ -67,53 +69,19 @@ class InputManager(object):
         parent.rowconfigure(1, weight=2)
         parent.columnconfigure(0, weight=1)
 
-        # PARAMETER FRAME
+        ###########################
+        ##### PARAMETER FRAME #####
+        ###########################
         parameter_frame = Frame(parent)
         parameter_frame.grid(row=0, column=0)
-
-        ###### SLACK FRAME #####
-        slack_frame = Frame(parameter_frame)
-        slack_frame.grid(row=1, column=0, padx=5, pady=5, sticky=W+E)
-        Label(slack_frame, text="Slack address for notifications: ", anchor=W).grid(row=0, column=0, sticky=W+E)
-        self.entry_slack = Entry(slack_frame)
-        self.entry_slack.grid(row=1, column=0, sticky=N+S+W+E)
-        self.button_slack = Button(slack_frame, text="Test", command=lambda: slack_test(self.entry_slack.get(), "Test"))
-        self.button_slack.grid(row=1, column=1, padx=5, sticky=W)
-
-        ###### SERIAL FRAME ######
-        serial_frame = Frame(parameter_frame)
-        serial_frame.grid(row=0, column=0, padx=5, pady=5, sticky=W+E)
-        self.ser = None
-        self.port_var = StringVar()
-
-        serial_ports_frame = Frame(serial_frame)
-        serial_ports_frame.grid(row=0, column=0, columnspan=2, sticky=W)
-        Label(serial_ports_frame, text="Serial port:").grid(row=0, column=0, sticky=E, padx=5)
-        self.option_ports = OptionMenu(serial_ports_frame, self.port_var, [])
-        self.option_ports.grid(row=0, column=1, sticky=W+E, padx=5)
-        Label(serial_ports_frame, text="Serial status:").grid(row=1, column=0, sticky=E, padx=5)
-        self.entry_serial_status = Entry(serial_ports_frame)
-        self.entry_serial_status.grid(row=1, column=1, sticky=W, padx=5)
-        self.entry_serial_status['state'] = NORMAL
-        self.entry_serial_status.insert(0, 'Closed')
-        self.entry_serial_status['state'] = DISABLED
-
-        open_close_frame = Frame(serial_frame)
-        open_close_frame.grid(row=1, column=0, columnspan=2, pady=10)
-        self.button_open_port = Button(open_close_frame, text="Open", command=self.open_serial)
-        self.button_close_port = Button(open_close_frame, text="Close", command=self.close_serial)
-        self.button_update_ports = Button(open_close_frame, text="Update", command=self.update_ports)
-        self.button_open_port.grid(row=0, column=0, pady=5)
-        self.button_close_port.grid(row=0, column=1, padx=10, pady=5)
-        self.button_update_ports.grid(row=0, column=2, pady=5)
+        Label(parameter_frame, text="Session parameters", font="-size 14").grid(row=0, column=0, columnspan=2)
 
         ###### SESSION SETTINGS FRAME ######
         session_frame = Frame(parameter_frame)
-        session_frame.grid(row=0, column=1, rowspan=2, padx=15, pady=5)
-        Label(session_frame, text="Session parameters", font="-size 14").grid(row=0, column=0, columnspan=2)
+        session_frame.grid(row=1, column=0, rowspan=2, padx=15, pady=5)
 
         core_session_frame = Frame(session_frame)
-        core_session_frame.grid(row=1, column=0)
+        core_session_frame.grid(row=0, column=0)
 
         # Trial frame
         trial_frame = Frame(core_session_frame)
@@ -159,7 +127,7 @@ class InputManager(object):
         
         # Optional settings frame
         opt_session_frame = Frame(session_frame)
-        opt_session_frame.grid(row=1, column=1)
+        opt_session_frame.grid(row=0, column=1)
 
         distro_frame = LabelFrame(opt_session_frame, text="ITI distribution")
         distro_frame.grid(row=0, column=0, padx=10, pady=5, sticky=W+E)
@@ -193,9 +161,45 @@ class InputManager(object):
         self.check_print = Checkbutton(debug_frame, text="Print Arduino output", variable=self.print_var)
         self.check_print.grid(row=0, column=0)
 
-        # Start frame
+        ###### SERIAL FRAME ######
+        serial_frame = Frame(parameter_frame)
+        serial_frame.grid(row=1, column=1, padx=5, pady=5, sticky=W+E)
+        self.ser = None
+        self.port_var = StringVar()
+
+        serial_ports_frame = Frame(serial_frame)
+        serial_ports_frame.grid(row=0, column=0, columnspan=2, sticky=W)
+        Label(serial_ports_frame, text="Serial port:").grid(row=0, column=0, sticky=E, padx=5)
+        self.option_ports = OptionMenu(serial_ports_frame, self.port_var, [])
+        self.option_ports.grid(row=0, column=1, sticky=W+E, padx=5)
+        Label(serial_ports_frame, text="Serial status:").grid(row=1, column=0, sticky=E, padx=5)
+        self.entry_serial_status = Entry(serial_ports_frame)
+        self.entry_serial_status.grid(row=1, column=1, sticky=W, padx=5)
+        self.entry_serial_status['state'] = NORMAL
+        self.entry_serial_status.insert(0, 'Closed')
+        self.entry_serial_status['state'] = 'readonly'
+
+        open_close_frame = Frame(serial_frame)
+        open_close_frame.grid(row=1, column=0, columnspan=2, pady=10)
+        self.button_open_port = Button(open_close_frame, text="Open", command=self.open_serial)
+        self.button_close_port = Button(open_close_frame, text="Close", command=self.close_serial)
+        self.button_update_ports = Button(open_close_frame, text="Update", command=self.update_ports)
+        self.button_open_port.grid(row=0, column=0, pady=5)
+        self.button_close_port.grid(row=0, column=1, padx=10, pady=5)
+        self.button_update_ports.grid(row=0, column=2, pady=5)
+
+        ###### SLACK FRAME #####
+        slack_frame = Frame(parameter_frame)
+        slack_frame.grid(row=2, column=1, padx=5, pady=5, sticky=W+E)
+        Label(slack_frame, text="Slack address for notifications: ", anchor=W).grid(row=0, column=0, sticky=W+E)
+        self.entry_slack = Entry(slack_frame)
+        self.entry_slack.grid(row=1, column=0, sticky=N+S+W+E)
+        self.button_slack = Button(slack_frame, text="Test", command=lambda: slack_test(self.entry_slack.get(), "Test"))
+        self.button_slack.grid(row=1, column=1, padx=5, sticky=W)
+
+        ##### START FRAME #####
         start_frame = Frame(parameter_frame)
-        start_frame.grid(row=2, column=0, columnspan=2, padx=5, pady=15, sticky=W+E)
+        start_frame.grid(row=3, column=0, columnspan=2, padx=5, pady=15, sticky=W+E)
         start_frame.columnconfigure(0, weight=4)
 
         Label(start_frame, text="File to save data:", anchor=W).grid(row=0, column=0, sticky=W)
@@ -210,65 +214,40 @@ class InputManager(object):
         self.button_start.grid(row=1, column=2, sticky=N+S, padx=5)
         self.button_stop.grid(row=1, column=3, sticky=N+S, padx=5)
 
-        # Default values
-        self.button_close_port['state'] = DISABLED
-        # self.entry_slack.insert(0, "@randall")
-        self.entry_presession.insert(0, 0)
-        self.entry_postsession.insert(0, 0)
-        self.entry_csplus.insert(0, 5)
-        self.entry_csminus.insert(0, 5)
-        self.entry_trial_dur.insert(0, 1000)
-        self.distro_var.set(1)
-        self.entry_meanITI.insert(0, 3000)
-        self.entry_minITI.insert(0, 2000)
-        self.entry_maxITI.insert(0, 20000)
-        self.entry_minITI['state'] = DISABLED
-        self.entry_maxITI['state'] = DISABLED
-        self.entry_csplus_dur.insert(0, 3000)
-        self.entry_csplus_freq.insert(0, 10000)
-        self.entry_csminus_dur.insert(0, 1000)
-        self.entry_csminus_freq.insert(0, 20000)
-        self.image_var.set(0)
-        self.print_var.set(True)
-        self.button_start['state'] = DISABLED
-        self.button_stop['state'] = DISABLED
-        
-
+        ###########################
         ###### MONITOR FRAME ######
+        ###########################
         monitor_frame = Frame(parent, bg='white')
         monitor_frame.grid(row=1, column=0, sticky=W+E+N+S)
         monitor_frame.columnconfigure(0, weight=4)
         Label(monitor_frame, text="Session events", bg='white', font="-size 16")\
             .grid(row=0, column=0, columnspan=2, pady=10)
 
+        ##### PLOTS #####
         sns.set_style('dark')
-        self.color_cs = 'purple'
-        self.color_cs_offset = 'gray'
-        self.color_track = 'gray'
+        self.color_csplus  = 'steelblue'
+        self.color_csminus  = 'coral'
+        self.color_track    = 'forestgreen'
         self.color_rail_end = 'black'
-        self.color_lick = 'salmon'
-        self.color_us = 'cadetblue'
 
         self.fig = Figure()
         gs = gridspec.GridSpec(10, 1)
         self.ax_total = self.fig.add_subplot(gs[0, :])
-        self.ax_histo = self.fig.add_subplot(gs[2:4, :])
-        self.ax_raster = self.fig.add_subplot(gs[4:, :])
+        self.ax_histo = self.fig.add_subplot(gs[1:3, :])
+        self.ax_raster = self.fig.add_subplot(gs[3:, :])
 
-        # Trial progression
+        # Session progression
+        self.ax_total.set_title("Session progression (trials)")
         self.ax_total.tick_params(axis='both',
                                   left='off', right='off', bottom='off', top='off',
                                   labelleft='off')
-        # self.scatter_trial_csplus = self.ax_total.scatter([], [], s=40000, c=self.color_csplus, marker='|')
-        # self.scatter_trial_csminus = self.ax_total.scatter([], [], s=40000, c=self.color_csminus, marker='|')
 
         # Trial histogram
-        self.ax_histo.tick_params(axis='x',
-                                  right='off', bottom='off', top='off',
-                                  labelbottom='off')
         self.ax_histo.set_ylabel("Probability")
         self.ax_histo.set_ylim(0, 1)
-        self.ax_histo.set_yticks([0, 1])
+        self.ax_histo.tick_params(axis='both',
+                                  left='off', right='off', bottom='off', top='off',
+                                  labelleft='off', labelbottom='off')
         self.histo_lines = []  # List of all lines in trial histogram
 
         # Raster plots
@@ -276,51 +255,49 @@ class InputManager(object):
         self.ax_raster.set_xlabel("Trial time (ms)")
         self.ax_raster.set_ylabel("Trials")
 
-        # new #################################
         self.raster_track = self.ax_raster.plot([], [], c=self.color_track)
         self.raster_rail_end = self.ax_raster.plot([], [], c=self.color_rail_end)
-        self.raster_lick = self.ax_raster.plot([], [], c=self.color_lick)
-        self.raster_us = self.ax_raster.plot([], [], c=self.color_us)
-        # new #################################
         self.raster_lines = [self.raster_track,
-        					 self.raster_rail_end,
-                             self.raster_lick,
-                             self.raster_us]
+        					 self.raster_rail_end]
 
         self.plot_canvas = FigureCanvasTkAgg(self.fig, monitor_frame)
         # self.plot_canvas.get_tk_widget().configure(background='black')  # retrieves "SystemButtonFace" for some reason
+        self.fig.tight_layout()
         self.plot_canvas.show()
         self.plot_canvas.get_tk_widget().grid(row=1, column=0, rowspan=2, sticky=W+E+N+S)
 
-        # Legend
+        ##### LEGEND #####
         legend_frame = Frame(monitor_frame, bg='white')
         legend_frame.grid(row=2, column=1)
-        Label(legend_frame, text=u'\u25ac', fg=self.color_lick, bg='white').grid(row=2, column=0)
-        Label(legend_frame, text='Lick', bg='white', anchor=W).grid(row=2, column=1, sticky=W)
-        Label(legend_frame, text=u'\u25ac', fg=self.color_us, bg='white').grid(row=3, column=0)
-        Label(legend_frame, text='US', bg='white', anchor=W).grid(row=3, column=1, sticky=W)
+        Label(legend_frame, text=u'\u25ac', fg=self.color_csplus, bg='white').grid(row=0, column=0)
+        Label(legend_frame, text='CS+', bg='white', anchor=W).grid(row=0, column=1, sticky=W)
+        Label(legend_frame, text=u'\u25ac', fg=self.color_csminus, bg='white').grid(row=1, column=0)
+        Label(legend_frame, text='CS-', bg='white', anchor=W).grid(row=1, column=1, sticky=W)
+        Label(legend_frame, text=u'\u25ac', fg=self.color_track, bg='white').grid(row=2, column=0)
+        Label(legend_frame, text='Track', bg='white', anchor=W).grid(row=2, column=1, sticky=W)
+        Label(legend_frame, text=u'\u25ac', fg=self.color_rail_end, bg='white').grid(row=3, column=0)
+        Label(legend_frame, text='Rail end', bg='white', anchor=W).grid(row=3, column=1, sticky=W)
 
-        # Scoreboard
+        ##### SCOREBOARD #####
         scoreboard_frame = Frame(monitor_frame, bg='white')
         scoreboard_frame.grid(row=1, column=1, padx=20, sticky=N)
         self.entry_end = Entry(scoreboard_frame, width=entry_width)
         self.entry_trial_ct = Entry(scoreboard_frame, width=entry_width)
         self.entry_nextTrial = Entry(scoreboard_frame, width=entry_width)
-        self.entry_lick_count = Entry(scoreboard_frame, width=entry_width)
+        self.entry_rail_ends = Entry(scoreboard_frame, width=entry_width)
         Label(scoreboard_frame, text="Session end:", bg='white', anchor=W).grid(row=0, sticky=W)
         Label(scoreboard_frame, text="Trials completed:", bg='white', anchor=W).grid(row=2, sticky=W)
         Label(scoreboard_frame, text="Next trial:", bg='white', anchor=W).grid(row=4, sticky=W)
-        Label(scoreboard_frame, text="Lick count:", bg='white', anchor=W).grid(row=6, sticky=W)
-        # Label(scoreboard_frame, text="Manual stims:", bg='white', anchor=W).grid(row=6, sticky=W)
+        Label(scoreboard_frame, text="Rail ends:", bg='white', anchor=W).grid(row=6, sticky=W)
         self.entry_end.grid(row=1, sticky=W)
         self.entry_trial_ct.grid(row=3, sticky=W)
         self.entry_nextTrial.grid(row=5, sticky=W)
-        self.entry_lick_count.grid(row=7, sticky=W)
+        self.entry_rail_ends.grid(row=7, sticky=W)
 
         self.scoreboard_objs = [self.entry_end,
                                 self.entry_trial_ct,
                                 self.entry_nextTrial,
-                                self.entry_lick_count]
+                                self.entry_rail_ends]
         
         ###### GUI OBJECTS ORGANIZED BY TIME ACTIVE ######
         # List of components to disable at open
@@ -352,22 +329,43 @@ class InputManager(object):
         self.obj_to_disable_at_start = [self.button_close_port,
                                         self.entry_save,
                                         self.button_save_file,
-                                        self.button_start]
+                                        self.button_start,
+                                        self.button_slack]
         self.obj_to_enable_at_start = [self.button_stop]
 
         # Update list of available ports
         self.update_ports()
 
+        # Default values
+        self.button_close_port['state'] = DISABLED
+        # self.entry_slack.insert(0, "@randall")
+        self.entry_presession.insert(0, 0)
+        self.entry_postsession.insert(0, 0)
+        self.entry_csplus.insert(0, 5)
+        self.entry_csminus.insert(0, 5)
+        self.entry_trial_dur.insert(0, 1000)
+        self.distro_var.set(1)
+        self.entry_meanITI.insert(0, 3000)
+        self.entry_minITI.insert(0, 2000)
+        self.entry_maxITI.insert(0, 20000)
+        self.entry_minITI['state'] = DISABLED
+        self.entry_maxITI['state'] = DISABLED
+        self.entry_csplus_dur.insert(0, 3000)
+        self.entry_csplus_freq.insert(0, 10000)
+        self.entry_csminus_dur.insert(0, 1000)
+        self.entry_csminus_freq.insert(0, 20000)
+        self.image_var.set(1)
+        self.print_var.set(True)
+        self.button_start['state'] = DISABLED
+        self.button_stop['state'] = DISABLED
+
         ###### SESSION VARIABLES ######
         self.parameters = collections.OrderedDict()
-        self.ser = serial.Serial()
+        self.ser = serial.Serial(timeout=1, baudrate=9600)
         self.start_time = ""
         self.trial_onset = np.empty(0)
         self.track = np.empty(0)
-        self.lick_onset = np.empty(0)
-        self.lick_offset = np.empty(0)
-        self.us_onset = np.empty(0)
-        self.us_offset = np.empty(0)
+        self.rail_end = np.empty(0)
         self.counter = {}
         self.in_trial = False
         self.trial_events = np.array([[]])
@@ -419,20 +417,20 @@ class InputManager(object):
                 # Disable object
                 obj['state'] = DISABLED
 
-            self.entrgiy_serial_status['state'] = NORMAL
+            self.entry_serial_status.config(state=NORMAL, fg='red')
             self.entry_serial_status.delete(0, END)
             self.entry_serial_status.insert(0, 'Opening...')
-            self.entry_serial_status['state'] = DISABLED
+            self.entry_serial_status['state'] = 'readonly'
 
         elif option == 'opened':
             # Enable start objects
             for obj in self.obj_to_enable_at_open:
                 obj['state'] = NORMAL
 
-            self.entry_serial_status['state'] = NORMAL
+            self.entry_serial_status.config(state=NORMAL, fg='black')
             self.entry_serial_status.delete(0, END)
             self.entry_serial_status.insert(0, 'Opened')
-            self.entry_serial_status['state'] = DISABLED
+            self.entry_serial_status['state'] = 'readonly'
 
         elif option == 'close':
             for obj, to_enable in zip(self.obj_to_disable_at_open, self.obj_enabled_at_open):
@@ -440,10 +438,10 @@ class InputManager(object):
             for obj in self.obj_to_enable_at_open:
                 obj['state'] = DISABLED
 
-            self.entry_serial_status['state'] = NORMAL
+            self.entry_serial_status.config(state=NORMAL, fg='black')
             self.entry_serial_status.delete(0, END)
             self.entry_serial_status.insert(0, 'Closed')
-            self.entry_serial_status['state'] = DISABLED
+            self.entry_serial_status['state'] = 'readonly'
 
         elif option == 'start':
             for obj in self.obj_to_disable_at_start:
@@ -457,10 +455,10 @@ class InputManager(object):
             for obj in self.obj_to_enable_at_start:
                 obj['state'] = DISABLED
 
-            self.entry_serial_status['state'] = NORMAL
+            self.entry_serial_status.config(state=NORMAL, fg='black')
             self.entry_serial_status.delete(0, END)
             self.entry_serial_status.insert(0, 'Closed')
-            self.entry_serial_status['state'] = DISABLED
+            self.entry_serial_status['state'] = 'readonly'
 
     def open_serial(self):
         # Executes when "Open" is pressed
@@ -480,8 +478,8 @@ class InputManager(object):
 
         # Define parameters
         # NOTE: Order is important here since this order is preserved when sending via serial.
-        self.parameters['csplus_number'] = int(self.entry_csplus_num.get())
-        self.parameters['csminus_number'] = int(self.entry_csminus_num.get())
+        self.parameters['csplus_number'] = int(self.entry_csplus.get())
+        self.parameters['csminus_number'] = int(self.entry_csminus.get())
         self.parameters['presession_window'] = int(self.entry_presession.get())
         self.parameters['postsession_window'] = int(self.entry_postsession.get())
         self.parameters['trial_duration'] = int(self.entry_trial_dur.get())
@@ -539,38 +537,28 @@ class InputManager(object):
         self.trial_onset = np.zeros(trial_num, dtype='uint32')
         self.steps = np.zeros((2, 360000), dtype='uint32')
         self.track = np.zeros((2, 360000), dtype='int32')
-        self.track = np.zeros(trial_num, dtype='uint32')
-        self.lick_onset = np.zeros(10000, dtype='uint32')
-        self.lick_offset = np.zeros(10000, dtype='uint32')
-        self.us_onset = np.zeros(10000, dtype='uint32')
-        self.us_offset = np.zeros(10000, dtype='uint32')
+        self.rail_end = np.zeros(trial_num, dtype='uint32')
         self.counter = {'trial': -1,
                         'track': 0,
-                        'steps': 0,
-                        'lick_onset': 0,
-                        'lick_offset': 0,
-                        'us_onset': 0,
-                        'us_offset': 0}
+                        'steps': 0}
 
         # Variables for trial histogram
         self.in_trial = False
-        self.trial_events_num = 2  # Number of events that will be plotted in histogram (eg, stim onset, licks)
+        self.trial_events_num = 2  # Number of events that will be plotted in histogram (eg, rail_end...)
         self.trial_events = np.nan * np.empty((self.trial_events_num, trial_num, self.bins))
         
         # Open serial and upload to Arduino
         self.ser.port = self.port_var.get()
         ser_return = start_arduino(self.ser, self.parameters)
         if ser_return:
-            pdb.set_trace()
             tkMessageBox.showerror("Serial error",
                                    "{0}: {1}\n\nCould not create serial connection. Check port is open."\
-                                   .format(ser_return.errno,
-                                           ser_return.strerror))
+                                   .format(ser_return.errno, ser_return.strerror))
             print "\n{0}: {1}\nCould not create serial connection. Check port is open."\
-                  .format(ser_return.errno,
-                          ser_return.strerror)
+                  .format(ser_return.errno, ser_return.strerror)
             self.close_serial  ## MIGHT NOT WORK BC SERIAL DIDN'T OPEN...
             self.gui_util('close')
+            pdb.set_trace()
             return
 
         self.gui_util('opened')
@@ -611,7 +599,8 @@ class InputManager(object):
         print "Session started at about " + self.start_time
 
         # Create thread to scan serial
-        thread_scan = threading.Thread(target=scan_serial, args=(self.q, self.ser, self.parameters, self.print_var.get()))
+        thread_scan = threading.Thread(target=scan_serial,
+                                       args=(self.q, self.ser, self.parameters, self.print_var.get()))
         thread_scan.start()
 
         # Update GUI alongside scan_serial
@@ -629,7 +618,8 @@ class InputManager(object):
         code_conveyer_steps = 1
         code_rail_end = 2
         code_next_trial = 3
-        code_trial_onset = 4
+        code_trial_onset_csplus = 4
+        code_trial_onset_csminus = 5
         code_session_length = 6
         code_track = 7
 
@@ -669,23 +659,27 @@ class InputManager(object):
                 self.counter['steps'] += 1
 
             elif code == code_rail_end:
-            	trial_ts = ts - self.trial_onset[self.counter['trial']]
-                    
+                # Record time end of rail reached
+                self.rail_end[self.counter['trial']] = ts
+
+                # Update scoreboard
+                self.entry_rail_ends.delete(0, END)
+                self.entry_rail_ends.insert(0, np.count_nonzero(self.rail_end))
+                
                 # Create data to plot in raster
                 # Data includes 3rd point that is NaN to "disconnect" tick marks from neighboring ones.
+                trial_ts = ts - self.trial_onset[self.counter['trial']]
                 new_data = np.append(self.raster_rail_end[0].get_data(),
-                                     [[trial_ts]*3, np.array([0, 1, np.nan]) + self.counter['trial']],
+                                     [[trial_ts] * 3, np.array([0, 1, np.nan]) + self.counter['trial']],
                                      axis=1)
                 self.raster_rail_end[0].set_data(new_data)
                 self.plot_canvas.draw()
 
-                # jalksdfjlsd;fjdslkf
-
             elif code == code_next_trial:
                 # Timestamp of next trial
-                # Received at the the end of the previous trial AND at the beginning of session.
+                # Received at the the end of the previous trial *AND* at the beginning of session.
                 self.in_trial = False
-                self.counter['trial'] += 1
+                self.counter['trial'] += 1          # Since executed at the beginning of session, value was initialized at -1
                 self.entry_trial_ct.delete(0, END)
                 self.entry_trial_ct.insert(0, self.counter['trial'])
 
@@ -709,7 +703,7 @@ class InputManager(object):
                 #         self.histo_lines[i][0].set_xy(np.transpose(np.append([new_x], [new_y], axis=0)))
                 #         self.plot_canvas.draw()
 
-            elif code == code_trial_onset:
+            elif code in [code_trial_onset_csplus, code_trial_onset_csminus]:
                 trial_dur = self.parameters['trial_duration']
 
                 # Timestamp of trial start
@@ -719,8 +713,12 @@ class InputManager(object):
                 self.trial_onset[self.counter['trial']] = ts
                 
                 # Update trial progress bar
+                if code == code_trial_onset_csplus:
+                    trial_color = self.color_csplus
+                else:
+                    trial_color = self.color_csminus
                 self.ax_total.axvspan(ts, ts + trial_dur,
-                                      facecolor=self.color_cs, edgecolor='none')
+                                      facecolor=trial_color, edgecolor='none')
                 self.plot_canvas.draw()
 
                 # Do NOT increment counter until end of trial
@@ -770,6 +768,7 @@ class InputManager(object):
             behav_grp.create_dataset(name='trial_onset', data=self.trial_onset, dtype='uint32')
             behav_grp.create_dataset(name='steps', data=self.steps[:, :self.counter['steps']], dtype='uint32')
             behav_grp.create_dataset(name='track', data=self.track[:, :self.counter['track']], dtype='int32')
+            behav_grp.create_dataset(name='rail_end', data=self.rail_end, dtype='uint32')
 
             # Store session parameters into behavior group
             behav_grp.attrs['start_time'] = self.start_time
@@ -820,20 +819,36 @@ def start_arduino(ser, parameters):
     values = parameters.values()
     print values
     sys.stdout.write("Uploading parameters to Arduino")
+    sys.stdout.flush()
     
     try:
         ser.open()
     except serial.SerialException as err:
+        sys.stdout.write("\nFailed to open connection.\n")
         return err
-    else:
-        # WAIT FOR ARDUINO TO ESTABLISH SERIAL CONNECTION
-        for t in range(5):
-            sys.stdout.write(".")
+
+    # WAIT FOR ARDUINO TO ESTABLISH SERIAL CONNECTION
+    timeout = 10
+    timeout_count = 0
+    while 1:
+        if timeout_count >= timeout:
+            sys.stdout.write(" connection timed out.\n")
             sys.stdout.flush()
-            time.sleep(1)
+            return serial.SerialException
+        sys.stdout.write(".")
+        sys.stdout.flush()
+        if ser.read(): break
 
     ser.flushInput()            # Remove opening message from serial
     ser.write('+'.join(str(s) for s in values))
+    while 1:
+        if timeout_count >= timeout:
+            sys.stdout.write(" connection timed out.\n")
+            sys.stdout.flush()
+            return serial.SerialException
+        sys.stdout.write(".")
+        sys.stdout.flush()
+        if ser.read(): break
     print "\nArduino updated."
 
     return 0
@@ -847,6 +862,7 @@ def scan_serial(q, ser, parameters, print_arduino=False):
     if print_arduino: print "  Scanning Arduino outputs."
     while 1:
         input_arduino = ser.readline()
+        if input_arduino == '': continue
         if print_arduino: sys.stdout.write('  [a]: ' + input_arduino)
 
         try:
@@ -863,7 +879,7 @@ def scan_serial(q, ser, parameters, print_arduino=False):
 def main():
     # GUI
     root = Tk()
-    root.wm_title("Session Control")
+    root.wm_title("Social conveyer")
     if os.name == 'nt':
         root.iconbitmap(os.path.join(os.getcwd(), 'neuron.ico'))
     InputManager(root)

@@ -32,7 +32,8 @@ const int code_end = 0;
 const int code_conveyer_steps = 1;
 const int code_rail_end = 2;
 const int code_next_trial = 3;
-const int code_trial_onset = 4;
+const int code_trial_onset_csplus = 4;
+const int code_trial_onset_csminus = 5;
 const int code_session_length = 6;
 const int code_track = 7;
 
@@ -271,7 +272,7 @@ void loop() {
   static boolean inTrial;               // Indicates if within trial
   static boolean imaging;               // Indicates imaging TTL state
   static boolean stimming;              // Indicates stimming state
-  static boolean endOfTrack;            // Indicates end of conveyer track reached
+  static boolean endOfRail;             // Indicates end of conveyer rail reached
   static boolean resetConveyer;
 
   // Get timestamp of current loop
@@ -304,63 +305,7 @@ void loop() {
     }
   }
 
-  // -- 1. TRACK MOVEMENT -- //
-  if (inTrial &&
-      !endOfTrack &&
-      digitalRead(railStopPin)) {
-    // End of track reached
-    endOfTrack = true;
-
-    // Relay to computer
-    Serial.print(code_rail_end);
-    Serial.print(DELIM);
-    Serial.println(ts);
-  }
-
-  if (ts >= nextTrackTS) {
-    int trackOutVal = trackChange;
-    trackChange = 0;
-    
-    if (trackOutVal != 0) {
-      // Print tracking valeus otherwise.
-      Serial.print(code_track);
-      Serial.print(DELIM);
-      Serial.print(ts);
-      Serial.print(DELIM);
-      Serial.println(trackOutVal);
-
-      if (inTrial &&
-          csplus_trials[nextTrial] &&
-          trackOutVal > 0 &&
-          !endOfTrack) {
-        // Number of steps on the motor is proportional to distance moved from
-        // tracking. Speed is set so time steps take will equal amount of time
-        // between each read of track value (ie, trackPeriod).
-
-        byte steps2take = trackOutVal >> STEPSCALE;
-        
-        // Speed calculation based on 50-ms track interval and 200 steps/rotation.
-        // Calculation: rot/min = steps(steps2take) / interval(50ms) * 60000 ms/min / steps/rot(200)
-        // Max number of steps is constrained by byte max (255) and max allowed 
-        // for step speed (assuming speed = steps * 6 thus 255/6 = 42).
-        byte stepSpeed = steps2take * 6;
-        
-        if (steps2take > 42) {
-          steps2take = 42;
-          stepSpeed = 255;
-        }
-
-        Serial1.write(STEPCODE);
-        Serial1.write(trackPeriod);
-        Serial1.write(steps2take);
-      }
-    }
-    
-    // Reset timer
-    nextTrackTS = nextTrackTS + trackPeriod;   // Increment nextTrackTS.
-  }
-
-  // -- 2. SESSION TIMING -- //
+  // -- 1. SESSION TIMING -- //
   if (running) {
     // 'running' defines that trials are left in session.
     
@@ -385,20 +330,22 @@ void loop() {
       }
 
       // Print trial start time
-      Serial.print(code_trial_onset);
+      if (csplus_trials[nextTrial]) {
+        Serial.print(code_trial_onset_csplus);
+      }
+      else {
+        Serial.print(code_trial_onset_csminus);
+      }
       Serial.print(DELIM);
       Serial.println(ts);
     }
-
-    // End of track reached
-    if (digitalRead())
 
     // End of trial
     // Ends on either time limit.
     else if (inTrial && 
              ts >= (trials[nextTrial] + trialDur)) {
       inTrial = false;
-      endOfTrack = false;
+      endOfRail = false;
       resetConveyer = true;
       
       if (!imageAll && imaging) {
@@ -429,6 +376,62 @@ void loop() {
     if (ts >= tsEnd) endSession(ts);
   }
   
+    // -- 1. TRACK MOVEMENT -- //
+  if (inTrial &&
+      !endOfRail &&
+      digitalRead(railStopPin)) {
+    // End of track reached
+    endOfRail = true;
+
+    // Relay to computer
+    Serial.print(code_rail_end);
+    Serial.print(DELIM);
+    Serial.println(ts);
+  }
+
+  if (ts >= nextTrackTS) {
+    int trackOutVal = trackChange;
+    trackChange = 0;
+    
+    if (trackOutVal != 0) {
+      // Print tracking valeus otherwise.
+      Serial.print(code_track);
+      Serial.print(DELIM);
+      Serial.print(ts);
+      Serial.print(DELIM);
+      Serial.println(trackOutVal);
+
+      if (inTrial &&
+          csplus_trials[nextTrial] &&
+          trackOutVal > 0 &&
+          !endOfRail) {
+        // Number of steps on the motor is proportional to distance moved from
+        // tracking. Speed is set so time steps take will equal amount of time
+        // between each read of track value (ie, trackPeriod).
+
+        byte steps2take = trackOutVal >> STEPSCALE;
+        
+        // Speed calculation based on 50-ms track interval and 200 steps/rotation.
+        // Calculation: rot/min = steps(steps2take) / interval(50ms) * 60000 ms/min / steps/rot(200)
+        // Max number of steps is constrained by byte max (255) and max allowed 
+        // for step speed (assuming speed = steps * 6 thus 255/6 = 42).
+        byte stepSpeed = steps2take * 6;
+        
+        if (steps2take > 42) {
+          steps2take = 42;
+          stepSpeed = 255;
+        }
+
+        Serial1.write((byte)STEPCODE);
+        Serial1.write(trackPeriod);
+        Serial1.write(steps2take);
+      }
+    }
+    
+    // Reset timer
+    nextTrackTS = nextTrackTS + trackPeriod;   // Increment nextTrackTS.
+  }
+  
   // -- 3. RESET CONVEYER -- //
   // Need to make sure reset is fast enough to finish before next trial
   static unsigned long nextResetTS;
@@ -440,9 +443,9 @@ void loop() {
     }
     else {
       if (ts >= nextResetTS) {
-        Serial1.write(STEPCODE);
-        Serial1.write(0);
-        Serial1.write(0);
+        Serial1.write((byte)STEPCODE);
+        Serial1.write((byte)0);
+        Serial1.write((byte)0);
         
         nextResetTS = ts + trackPeriod;
       }
