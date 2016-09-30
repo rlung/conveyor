@@ -13,9 +13,10 @@
 #define IMGPINDUR 100
 #define ENDCODE 48
 #define STARTCODE 69
-#define DELIM ","               // Delimiter used for serial outputs
-#define STEPSCALE 2             // Scale factor to convert tracking to stepper
+#define DELIM ","         // Delimiter used for serial outputs
+#define STEPSCALE 2       // Scale factor to convert tracking to stepper
 #define STEPCODE 53
+#define STEPMAX 255       // Maximum number of steps by stepper
 
 
 // Pins
@@ -294,9 +295,9 @@ void loop() {
     }
   }
 
-  if (Serial1.available() > 0) {
+  if (Serial1.available() > 1) {
     // Tranmit step data from Arduino slave.
-    if (Serial.read() == STEPCODE) {  // Throw out first byte
+    if (Serial1.read() == STEPCODE) {  // Throw out first byte
       Serial.print(code_conveyer_steps);
       Serial.print(DELIM);
       Serial.print(ts);
@@ -323,10 +324,10 @@ void loop() {
 
       // Tone to start trial
       if (csplus_trials[nextTrial]) {
-//        tone(csPin, csplusFreq, csplusDur);
+        tone(csPin, csplusFreq, csplusDur);
       }
       else {
-//        tone(csPin, csminusFreq, csminusDur);
+        tone(csPin, csminusFreq, csminusDur);
       }
 
       // Print trial start time
@@ -376,7 +377,7 @@ void loop() {
     if (ts >= tsEnd) endSession(ts);
   }
   
-    // -- 1. TRACK MOVEMENT -- //
+  // -- 2. TRACK MOVEMENT -- //
   if (inTrial &&
       !endOfRail &&
       digitalRead(railStopPin)) {
@@ -405,21 +406,10 @@ void loop() {
           csplus_trials[nextTrial] &&
           trackOutVal > 0 &&
           !endOfRail) {
-        // Number of steps on the motor is proportional to distance moved from
-        // tracking. Speed is set so time steps take will equal amount of time
-        // between each read of track value (ie, trackPeriod).
-
+        
         byte steps2take = trackOutVal >> STEPSCALE;
-        
-        // Speed calculation based on 50-ms track interval and 200 steps/rotation.
-        // Calculation: rot/min = steps(steps2take) / interval(50ms) * 60000 ms/min / steps/rot(200)
-        // Max number of steps is constrained by byte max (255) and max allowed 
-        // for step speed (assuming speed = steps * 6 thus 255/6 = 42).
-        byte stepSpeed = steps2take * 6;
-        
-        if (steps2take > 42) {
-          steps2take = 42;
-          stepSpeed = 255;
+        if (steps2take > STEPMAX) {
+          steps2take = STEPMAX;
         }
 
         Serial1.write((byte)STEPCODE);
@@ -445,7 +435,7 @@ void loop() {
       if (ts >= nextResetTS) {
         Serial1.write((byte)STEPCODE);
         Serial1.write((byte)0);
-        Serial1.write((byte)0);
+        Serial1.write((byte)0);  // This value doesn't really matter
         
         nextResetTS = ts + trackPeriod;
       }

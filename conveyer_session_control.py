@@ -1,9 +1,10 @@
 
 """
-Session control
+Social conveyer
 Randall Ung
 
-Creates GUI to control behavioral and imaging devices for in vivo calcium imaging. Script interfaces with Arduino microcontroller and sends TTLs for controlling imaging acquisition.
+Creates GUI to control behavioral and imaging devices for in vivo calcium
+imaging. Script interfaces with Arduino microcontroller and imaging devices.
 """
 
 from Tkinter import *
@@ -24,10 +25,12 @@ import h5py
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+from matplotlib.colors import LinearSegmentedColormap
 from matplotlib import style
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2TkAgg
 from matplotlib.figure import Figure
 from matplotlib import gridspec
+from matplotlib.collections import LineCollection
 import seaborn as sns
 import pdb
 
@@ -224,11 +227,15 @@ class InputManager(object):
             .grid(row=0, column=0, columnspan=2, pady=10)
 
         ##### PLOTS #####
+        self.num_rail_segments = 10  # Number of segments to split rail--for plotting
+
         sns.set_style('dark')
         self.color_csplus  = 'steelblue'
         self.color_csminus  = 'coral'
         self.color_track    = 'forestgreen'
         self.color_rail_end = 'black'
+        self.color_grays = [np.array([1, 1, 1], dtype=float) * n / self.num_rail_segments \
+                            for n in np.arange(self.num_rail_segments)]
 
         self.fig = Figure()
         gs = gridspec.GridSpec(10, 1)
@@ -237,28 +244,37 @@ class InputManager(object):
         self.ax_raster = self.fig.add_subplot(gs[3:, :])
 
         # Session progression
-        self.ax_total.set_title("Session progression (trials)")
         self.ax_total.tick_params(axis='both',
                                   left='off', right='off', bottom='off', top='off',
                                   labelleft='off')
+        self.ax_total.set_title("Session progression (trials)")
 
         # Trial histogram
+        # Create CDF for each variable.
         self.ax_histo.set_ylabel("Probability")
         self.ax_histo.set_ylim(0, 1)
         self.ax_histo.tick_params(axis='both',
                                   left='off', right='off', bottom='off', top='off',
                                   labelleft='off', labelbottom='off')
-        self.histo_lines = []  # List of all lines in trial histogram
+        self.histo_rail_end = self.ax_histo.plot([], [], color=self.color_rail_end)
+        self.histo_lines = [self.histo_rail_end]  # List of all lines in trial histogram
 
         # Raster plots
+        # Create segmented line plots broken by np.nan values.
+        # self.raster_steps uses LineCollection instead to set different colors for each segment.
         self.ax_raster.tick_params(axis='y', left='off', right='off', labelleft='off')
         self.ax_raster.set_xlabel("Trial time (ms)")
         self.ax_raster.set_ylabel("Trials")
 
         self.raster_track = self.ax_raster.plot([], [], c=self.color_track)
+        # self.raster_steps = self.ax_steps.plot([], [], c=(1, 1, 1))  # will scale colors to black
         self.raster_rail_end = self.ax_raster.plot([], [], c=self.color_rail_end)
         self.raster_lines = [self.raster_track,
+                             # self.raster_steps,
         					 self.raster_rail_end]
+        segments = [[(xi, 0), (xi, 1)] for xi in np.arange(self.num_rail_segments)]
+        self.raster_steps = LineCollection([], colors=self.color_grays)
+        self.ax_raster.add_collection(self.raster_steps)
 
         self.plot_canvas = FigureCanvasTkAgg(self.fig, monitor_frame)
         # self.plot_canvas.get_tk_widget().configure(background='black')  # retrieves "SystemButtonFace" for some reason
@@ -273,8 +289,8 @@ class InputManager(object):
         Label(legend_frame, text='CS+', bg='white', anchor=W).grid(row=0, column=1, sticky=W)
         Label(legend_frame, text=u'\u25ac', fg=self.color_csminus, bg='white').grid(row=1, column=0)
         Label(legend_frame, text='CS-', bg='white', anchor=W).grid(row=1, column=1, sticky=W)
-        Label(legend_frame, text=u'\u25ac', fg=self.color_track, bg='white').grid(row=2, column=0)
-        Label(legend_frame, text='Track', bg='white', anchor=W).grid(row=2, column=1, sticky=W)
+        Label(legend_frame, text=u'\u25ac', fg='gray', bg='white').grid(row=2, column=0)
+        Label(legend_frame, text='Rail progression', bg='white', anchor=W).grid(row=2, column=1, sticky=W)
         Label(legend_frame, text=u'\u25ac', fg=self.color_rail_end, bg='white').grid(row=3, column=0)
         Label(legend_frame, text='Rail end', bg='white', anchor=W).grid(row=3, column=1, sticky=W)
 
@@ -343,17 +359,17 @@ class InputManager(object):
         self.entry_postsession.insert(0, 0)
         self.entry_csplus.insert(0, 5)
         self.entry_csminus.insert(0, 5)
-        self.entry_trial_dur.insert(0, 1000)
+        self.entry_trial_dur.insert(0, 2500)
         self.distro_var.set(1)
         self.entry_meanITI.insert(0, 3000)
         self.entry_minITI.insert(0, 2000)
         self.entry_maxITI.insert(0, 20000)
         self.entry_minITI['state'] = DISABLED
         self.entry_maxITI['state'] = DISABLED
-        self.entry_csplus_dur.insert(0, 3000)
+        self.entry_csplus_dur.insert(0, 1000)
         self.entry_csplus_freq.insert(0, 10000)
         self.entry_csminus_dur.insert(0, 1000)
-        self.entry_csminus_freq.insert(0, 20000)
+        self.entry_csminus_freq.insert(0, 12000)
         self.image_var.set(1)
         self.print_var.set(True)
         self.button_start['state'] = DISABLED
@@ -371,8 +387,6 @@ class InputManager(object):
         self.trial_events = np.array([[]])
         self.trial_events_num = 0
         self.trial_events_count = 0
-        self.bins = 120
-        self.track_bins = 0
         self.q = Queue()
 
     def update_ports(self):
@@ -473,6 +487,7 @@ class InputManager(object):
         print "\nChecking parameters."
         if self.port_var.get() == "No ports found":
             tkMessageBox.showerror("Serial error", "No port selected. Make sure Arduino is plugged in.")
+            print "No ports found. Please attach Arduino or check connection."
             self.gui_util('close')
             return
 
@@ -515,7 +530,8 @@ class InputManager(object):
         # self.scatter_trial_csminus.set_offsets([])
         self.ax_total.cla()
         for line in self.histo_lines:
-            line[0].set_xy([[0, 0]])
+            line[0].set_xdata([])
+            line[0].set_ydata([])
         for line in self.raster_lines:
             line[0].set_data([[], []])
         self.plot_canvas.draw()
@@ -527,15 +543,15 @@ class InputManager(object):
         self.ax_raster.set_ylim(trial_num, 0)
         self.ax_raster.set_xlim(0, trial_window)
         
-        # new ###########################
-        # self.raster_track.set_array()
-        # del self.raster_track
-        self.track_bins = np.arange(0, trial_window + self.parameters['track_period'], self.parameters['track_period'])
-        # new ###########################
+        # Create "blank" LineCollection to be filled later
+        blank_segments = [np.array([[-1, yi], [-1, yi+1]]) for yi in np.arange(trial_num) \
+                                                           for _ in np.arange(self.num_rail_segments)]
+        self.raster_steps.set_segments(blank_segments)
         
         # Initialize/clear old data
         self.trial_onset = np.zeros(trial_num, dtype='uint32')
         self.steps = np.zeros((2, 360000), dtype='uint32')
+        self.steps_by_trial = np.zeros(trial_num, dtype='uint32')
         self.track = np.zeros((2, 360000), dtype='int32')
         self.rail_end = np.zeros(trial_num, dtype='uint32')
         self.counter = {'trial': -1,
@@ -544,21 +560,18 @@ class InputManager(object):
 
         # Variables for trial histogram
         self.in_trial = False
-        self.trial_events_num = 2  # Number of events that will be plotted in histogram (eg, rail_end...)
-        self.trial_events = np.nan * np.empty((self.trial_events_num, trial_num, self.bins))
         
         # Open serial and upload to Arduino
         self.ser.port = self.port_var.get()
         ser_return = start_arduino(self.ser, self.parameters)
         if ser_return:
             tkMessageBox.showerror("Serial error",
-                                   "{0}: {1}\n\nCould not create serial connection. Check port is open."\
+                                   "{0}: {1}\n\nCould not create serial connection."\
                                    .format(ser_return.errno, ser_return.strerror))
             print "\n{0}: {1}\nCould not create serial connection. Check port is open."\
                   .format(ser_return.errno, ser_return.strerror)
             self.close_serial  ## MIGHT NOT WORK BC SERIAL DIDN'T OPEN...
             self.gui_util('close')
-            pdb.set_trace()
             return
 
         self.gui_util('opened')
@@ -610,8 +623,9 @@ class InputManager(object):
         # Checks Queue for incoming data from arduino. Data arrives as comma-separated values with the first element
         # ('code') defining the type of data.
 
-        # Rate to update GUI. Should be faster than data coming in, eg tracking rate
-        refresh_rate = 10
+        refresh_rate = 10  # Rate to update GUI. Should be faster than data coming in, eg tracking rate
+        steps_per_rail = 600  # Number of steps by stepper to traverse entire rail
+        rail_milestones = (np.arange(self.num_rail_segments, dtype=float) + 1) * steps_per_rail / self.num_rail_segments
 
         # Codes
         code_end = 0
@@ -652,8 +666,26 @@ class InputManager(object):
             elif code == code_conveyer_steps:
                 dist = int(q_in[2])
 
-                # Record tracking
+                # Record steps
                 self.steps[:, self.counter['steps']] = [ts, dist]
+                self.steps_by_trial[self.counter['trial']] += dist
+
+                ##### PLEASE CHECK THIS #####
+                trial_start_ix = self.counter['trial'] * self.num_rail_segments
+                trial_stop_ix = (self.counter['trial'] + 1) * self.num_rail_segments
+                segments = self.raster_steps.get_segments()
+                trial_line_segments = segments[trial_start_ix:trial_stop_ix]
+                rail_milestones_ahead = [segment[0, 0] < 0 for segment in trial_line_segments]  # rail segments to be passed (milestones)
+                rail_milestones_new = (self.steps_by_trial[self.counter['trial']] > rail_milestones) & \
+                                      rail_milestones_ahead
+                if np.any(rail_milestones_new):
+                    for nn, xx in enumerate(rail_milestones_new):
+                        if xx:
+                            trial_line_segments[nn][:, 0] = ts
+                    # trial_line_segments[rail_milestones_new], :, 0] = ts
+                    self.raster_steps.set_segments(segments)
+                    self.plot_canvas.draw()
+                #############################
 
                 # Increment counter
                 self.counter['steps'] += 1
@@ -691,17 +723,6 @@ class InputManager(object):
                 else:
                     self.entry_nextTrial.delete(0, END)
                     self.entry_nextTrial.insert(0, "-")
-
-                # Update histogram
-                # for i in range(self.trial_events_num):
-                #     new_hist, bins = np.histogram(self.trial_events[i, 0:self.trial_events_count[i]],
-                #                                   self.bins,
-                #                                   (-parameters['prestim_window'], parameters['poststim_window']))
-                #     if new_hist.any():
-                #         new_y = np.append(new_hist, [0, 0])/self.trial_events_count  # convert count to probability
-                #         new_x = np.append(bins[1:], [bins[-1], 0])  # Take the end point of each bin
-                #         self.histo_lines[i][0].set_xy(np.transpose(np.append([new_x], [new_y], axis=0)))
-                #         self.plot_canvas.draw()
 
             elif code in [code_trial_onset_csplus, code_trial_onset_csminus]:
                 trial_dur = self.parameters['trial_duration']
@@ -767,6 +788,7 @@ class InputManager(object):
             behav_grp = data_file.create_group('behavior')
             behav_grp.create_dataset(name='trial_onset', data=self.trial_onset, dtype='uint32')
             behav_grp.create_dataset(name='steps', data=self.steps[:, :self.counter['steps']], dtype='uint32')
+            behav_grp.create_dataset(name='steps_by_trial', data=self.steps_by_trial, dtype='uint32')
             behav_grp.create_dataset(name='track', data=self.track[:, :self.counter['track']], dtype='int32')
             behav_grp.create_dataset(name='rail_end', data=self.rail_end, dtype='uint32')
 
@@ -838,6 +860,7 @@ def start_arduino(ser, parameters):
         sys.stdout.write(".")
         sys.stdout.flush()
         if ser.read(): break
+        timeout_count += 1
 
     ser.flushInput()            # Remove opening message from serial
     ser.write('+'.join(str(s) for s in values))
