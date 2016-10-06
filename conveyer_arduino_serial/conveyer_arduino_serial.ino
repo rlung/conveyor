@@ -23,6 +23,7 @@
 const int imgStartPin = 6;
 const int imgStopPin  = 7;
 const int csPin = 4;
+const int ledPin = 13;
 const int railStartPin = 9;
 const int railStopPin = 10;
 const int trackPinA   = 2;
@@ -322,13 +323,15 @@ void loop() {
         imaging = true;
       }
 
-      // Tone to start trial
+      // Cues
       if (csplus_trials[nextTrial]) {
         tone(csPin, csplusFreq, csplusDur);
       }
       else {
         tone(csPin, csminusFreq, csminusDur);
       }
+
+      digitalWrite(ledPin, HIGH);
 
       // Print trial start time
       if (csplus_trials[nextTrial]) {
@@ -348,6 +351,8 @@ void loop() {
       inTrial = false;
       endOfRail = false;
       resetConveyer = true;
+
+      digitalWrite(ledPin, LOW);
       
       if (!imageAll && imaging) {
         digitalWrite(imgStopPin, HIGH);
