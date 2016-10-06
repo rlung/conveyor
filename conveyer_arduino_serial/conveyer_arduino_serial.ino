@@ -14,7 +14,7 @@
 #define ENDCODE 48
 #define STARTCODE 69
 #define DELIM ","         // Delimiter used for serial outputs
-#define STEPSCALE 2       // Scale factor to convert tracking to stepper
+#define STEPSCALE 1       // Scale factor to convert tracking to stepper
 #define STEPCODE 53
 #define STEPMAX 255       // Maximum number of steps by stepper
 
