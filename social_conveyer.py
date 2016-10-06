@@ -355,7 +355,7 @@ class InputManager(object):
         # Default values
         self.button_close_port['state'] = DISABLED
         # self.entry_slack.insert(0, "@randall")
-        self.entry_presession.insert(0, 0)
+        self.entry_presession.insert(0, 30000)
         self.entry_postsession.insert(0, 0)
         self.entry_csplus.insert(0, 10)
         self.entry_csminus.insert(0, 0)
