@@ -83,6 +83,8 @@ void endSession(unsigned long ts) {
   digitalWrite(imgStartPin, LOW);
   delay(100);
   digitalWrite(imgStopPin, LOW);
+  digitalWrite(ledPin, LOW);
+  noTone(csPin);
 
   delete [] trials;
   unsigned long trials = 0;
