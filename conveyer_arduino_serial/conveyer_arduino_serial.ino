@@ -218,6 +218,7 @@ void setup() {
   randomSeed(analogRead(0));
 
   // Set pins
+  pinMode(ledPin, OUTPUT);
   pinMode(imgStartPin, OUTPUT);
   pinMode(imgStopPin, OUTPUT);
   pinMode(railStartPin, INPUT);
