@@ -36,7 +36,7 @@ void loop() {
     // be encoded differently (eg, 255, 255).
     if (interval == 0) {
       // Reset rail parameters
-      speed = 180;
+      speed = 125;
       steps = -25;
     }
     else {
