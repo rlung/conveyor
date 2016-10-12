@@ -38,8 +38,11 @@ import pdb
 # Setup Slack
 # Token is stored in text file 'key_file'
 key_file = 'slack.txt'
-with open(key_file, 'r') as kf:
-    slack = Slacker(kf.read())
+if os.path.isfile(key_file):
+    with open(key_file, 'r') as kf:
+        slack = Slacker(kf.read())
+else:
+    slack = None
 
 
 class InputManager(object):
@@ -197,7 +200,7 @@ class InputManager(object):
         Label(slack_frame, text="Slack address for notifications: ", anchor=W).grid(row=0, column=0, sticky=W+E)
         self.entry_slack = Entry(slack_frame)
         self.entry_slack.grid(row=1, column=0, sticky=N+S+W+E)
-        self.button_slack = Button(slack_frame, text="Test", command=lambda: slack_test(self.entry_slack.get(), "Test"))
+        self.button_slack = Button(slack_frame, text="Test", command=lambda: slack_msg(self.entry_slack.get(), "Test", test=True))
         self.button_slack.grid(row=1, column=1, padx=5, sticky=W)
 
         ##### START FRAME #####
@@ -603,20 +606,20 @@ class InputManager(object):
             filename = 'data/data-' + now.strftime('%y%m%d-%H%M%S') + '.h5'
             data_file = h5py.File(filename, 'x')
 
-        slack_test(self.entry_slack.get(), None)
+        # slack_test(self.entry_slack.get(), None)
         
         # Run session
-        self.ser.flushInput()            # Remove data from serial input
-        self.ser.write('E')
+        self.ser.flushInput()                                   # Remove data from serial input
+        self.ser.write('E')                                     # Start signal for Arduino
         self.start_time = datetime.now().strftime("%H:%M:%S")
-        print "Session started at about " + self.start_time
+        print "Session start ~ " + self.start_time
 
         # Create thread to scan serial
         thread_scan = threading.Thread(target=scan_serial,
                                        args=(self.q, self.ser, self.parameters, self.print_var.get()))
         thread_scan.start()
 
-        # Update GUI alongside scan_serial
+        # Update GUI alongside Arduino scanning (scan_serial on separate thread)
         self.update_session(data_file)
 
     def update_session(self, data_file):
@@ -807,12 +810,42 @@ class InputManager(object):
         print "Session ended at " + end_time
 
         # Slack that session is done.
-        if self.entry_slack.get():
-            slack.chat.post_message(self.entry_slack.get(), "Session ended.")
+        if self.entry_slack.get() & \
+           slack:
+            slack_msg(self.entry_slack.get(), "Session ended.")
 
 
-def slack_test(slack_recipient, msg):
+# def slack_test(slack_recipient, msg):
+#     # Creates Slack message to slack_recipient from Bot. Message is string msg.
+
+#     # Verify Slack recipient
+#     if not slack_recipient:
+#         return
+#     slack_code = slack_recipient[0]
+#     slack_name = slack_recipient[1::]
+#     if slack_code is '@':
+#         slack_users = slack.users.list().body['members']
+#         slack_user_names = [user['name'] for user in slack_users]
+#         if slack_name not in slack_user_names:
+#             tkMessageBox.showerror("Slack error", "Slack user does not exist")
+#     elif slack_code is '#':
+#         slack_channels = slack.channels.list().body['members']
+#         slack_channel_names = [channel['name'] for channel in slack_channels]
+#         if slack_name not in slack_channel_names:
+#             tkMessageBox.showerror("Slack error", "Slack channel does not exist")
+#     else:
+#         tkMessageBox.showerror("Slack error", "Slack recipient is invalid.")
+
+#     if msg:
+#         slack.chat.post_message(slack_recipient, msg,
+#                                 username="Social conveyer bot",
+#                                 icon_emoji=":squirrel:")
+
+
+def slack_msg(slack_recipient, msg, test=False):
     # Creates Slack message to slack_recipient from Bot. Message is string msg.
+    bot_username = "Social conveyer bot"
+    bot_icon = ":squirrel:"
 
     # Verify Slack recipient
     if not slack_recipient:
@@ -823,17 +856,29 @@ def slack_test(slack_recipient, msg):
         slack_users = slack.users.list().body['members']
         slack_user_names = [user['name'] for user in slack_users]
         if slack_name not in slack_user_names:
-            tkMessageBox.showerror("Slack error", "Slack user does not exist")
+            if test:
+                tkMessageBox.showerror("Slack error", "Slack user does not exist")
+            else:
+                print "Slack user does not exist. Message failed to send."
     elif slack_code is '#':
         slack_channels = slack.channels.list().body['members']
         slack_channel_names = [channel['name'] for channel in slack_channels]
         if slack_name not in slack_channel_names:
-            tkMessageBox.showerror("Slack error", "Slack channel does not exist")
+            if test:
+                tkMessageBox.showerror("Slack error", "Slack channel does not exist")
+            else:
+                print "Slack channel does not exist. Message failed to send."
     else:
-        tkMessageBox.showerror("Slack error", "Slack recipient is invalid.")
+        if test:
+            tkMessageBox.showerror("Slack error", "Slack recipient is invalid.")
+        else:
+            print "Slack recipient invalid. Message failed to send."
+        return
 
     if msg:
-        slack.chat.post_message(slack_recipient, msg)
+        slack.chat.post_message(slack_recipient, msg,
+                                username=bot_username,
+                                icon_emoji=bot_icon)
 
 
 def start_arduino(ser, parameters):
