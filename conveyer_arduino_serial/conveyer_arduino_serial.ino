@@ -402,7 +402,7 @@ void loop() {
     int trackOutVal = trackChange;
     trackChange = 0;
     
-    if (trackOutVal >= 2) {
+    if (trackOutVal >= 5) {
       // Print tracking valeus otherwise.
       Serial.print(code_track);
       Serial.print(DELIM);

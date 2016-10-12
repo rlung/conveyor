@@ -810,7 +810,7 @@ class InputManager(object):
         print "Session ended at " + end_time
 
         # Slack that session is done.
-        if self.entry_slack.get() & \
+        if self.entry_slack.get() and \
            slack:
             slack_msg(self.entry_slack.get(), "Session ended.")
 
