@@ -14,9 +14,9 @@
 #define ENDCODE 48
 #define STARTCODE 69
 #define DELIM ","         // Delimiter used for serial outputs
-#define STEPSCALE 2       // Scale factor to convert tracking to stepper
+#define STEPSCALE 1       // Scale factor to convert tracking to stepper
 #define STEPCODE 53
-#define STEPMAX 255       // Maximum number of steps by stepper
+#define STEPMAX 127       // Maximum number of steps by stepper
 
 
 // Pins
@@ -218,6 +218,7 @@ void setup() {
   randomSeed(analogRead(0));
 
   // Set pins
+  pinMode(ledPin, OUTPUT);
   pinMode(imgStartPin, OUTPUT);
   pinMode(imgStopPin, OUTPUT);
   pinMode(railStartPin, INPUT);
@@ -401,7 +402,7 @@ void loop() {
     int trackOutVal = trackChange;
     trackChange = 0;
     
-    if (trackOutVal != 0) {
+    if (trackOutVal >= 2) {
       // Print tracking valeus otherwise.
       Serial.print(code_track);
       Serial.print(DELIM);

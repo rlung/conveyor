@@ -358,20 +358,20 @@ class InputManager(object):
         # Default values
         self.button_close_port['state'] = DISABLED
         # self.entry_slack.insert(0, "@randall")
-        self.entry_presession.insert(0, 0)
+        self.entry_presession.insert(0, 30000)
         self.entry_postsession.insert(0, 0)
-        self.entry_csplus.insert(0, 5)
-        self.entry_csminus.insert(0, 5)
-        self.entry_trial_dur.insert(0, 2500)
+        self.entry_csplus.insert(0, 10)
+        self.entry_csminus.insert(0, 0)
+        self.entry_trial_dur.insert(0, 60000)
         self.distro_var.set(1)
-        self.entry_meanITI.insert(0, 3000)
+        self.entry_meanITI.insert(0, 90000)
         self.entry_minITI.insert(0, 2000)
         self.entry_maxITI.insert(0, 20000)
         self.entry_minITI['state'] = DISABLED
         self.entry_maxITI['state'] = DISABLED
-        self.entry_csplus_dur.insert(0, 1000)
+        self.entry_csplus_dur.insert(0, 3000)
         self.entry_csplus_freq.insert(0, 10000)
-        self.entry_csminus_dur.insert(0, 1000)
+        self.entry_csminus_dur.insert(0, 3000)
         self.entry_csminus_freq.insert(0, 12000)
         self.image_var.set(1)
         self.print_var.set(True)
