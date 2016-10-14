@@ -14,7 +14,7 @@
 #define ENDCODE 48
 #define STARTCODE 69
 #define DELIM ","         // Delimiter used for serial outputs
-#define STEPSCALE 1       // Scale factor to convert tracking to stepper
+#define STEPSHIFT 1       // Scale factor to convert tracking to stepper
 #define STEPCODE 53
 #define STEPMAX 127       // Maximum number of steps by stepper
 
@@ -59,7 +59,6 @@ boolean imageAll;
 unsigned int trackPeriod;
 
 // Other variables
-unsigned long sampleDelay;
 unsigned long* trials;          // Pointer to array for DMA; initialized later
 boolean* csplus_trials;
 volatile int trackChange = 0;   // Rotations within tracking epochs
@@ -226,9 +225,6 @@ void setup() {
   pinMode(trackPinA, INPUT);
   pinMode(trackPinB, INPUT);
 
-  // Set interrupt
-  attachInterrupt(digitalPinToInterrupt(trackPinA), track, RISING);
-
   // Wait for parameters from serial
   Serial.println("conveyer_arduino\n"
                  "Waiting for parameters to load.");
@@ -247,6 +243,9 @@ void setup() {
   // Wait for start signal
   Serial.println("Waiting for start signal ('E').");
   waitForStart();
+
+  // Set interrupt
+  attachInterrupt(digitalPinToInterrupt(trackPinA), track, RISING);
 
   // Print timestamp of first trial and length of session
   Serial.print(code_session_length);
@@ -276,7 +275,6 @@ void loop() {
   static boolean running = true;        // Indicates trials are still in process
   static boolean inTrial;               // Indicates if within trial
   static boolean imaging;               // Indicates imaging TTL state
-  static boolean stimming;              // Indicates stimming state
   static boolean endOfRail;             // Indicates end of conveyer rail reached
   static boolean resetConveyer;
 
@@ -300,7 +298,7 @@ void loop() {
   }
 
   if (Serial1.available() > 1) {
-    // Tranmit step data from Arduino slave.
+    // Transmit step data from Arduino slave.
     if (Serial1.read() == STEPCODE) {  // Throw out first byte
       Serial.print(code_conveyer_steps);
       Serial.print(DELIM);
@@ -402,7 +400,7 @@ void loop() {
     int trackOutVal = trackChange;
     trackChange = 0;
     
-    if (trackOutVal >= 5) {
+    if (trackOutVal != 0) {
       // Print tracking valeus otherwise.
       Serial.print(code_track);
       Serial.print(DELIM);
@@ -412,10 +410,10 @@ void loop() {
 
       if (inTrial &&
           csplus_trials[nextTrial] &&
-          trackOutVal > 0 &&
+          trackOutVal > 4 &&
           !endOfRail) {
         
-        byte steps2take = trackOutVal >> STEPSCALE;
+        byte steps2take = trackOutVal >> STEPSHIFT;
         if (steps2take > STEPMAX) {
           steps2take = STEPMAX;
         }
