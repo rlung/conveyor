@@ -488,6 +488,7 @@ class InputManager(object):
         self.track = np.zeros((2, 360000), dtype='int32')
         self.rail_end = np.zeros(int(self.parameters['session_duration']/10), dtype='uint32')
         self.counter = {'trial': 0,
+                        'rail_end': 0,
                         'track': 0,
                         'steps': 0}
 
@@ -601,16 +602,17 @@ class InputManager(object):
 
             elif code == code_rail_end:
                 # Record time end of rail reached
-                self.rail_end[self.counter['trial']] = ts
+                self.rail_end[self.counter['rail_end']] = ts
 
                 # Update scoreboard
                 self.entry_rail_ends.delete(0, END)
                 self.entry_rail_ends.insert(0, np.count_nonzero(self.rail_end))
 
-                self.counter['trial'] += 1
+                self.counter['rail_end'] += 1
 
             elif code == code_trial_start:
                 self.trial_onset[self.counter['trial']] = ts
+                self.counter['trial'] += 1
 
             elif code == code_session_length:
                 # Length of session
@@ -650,7 +652,7 @@ class InputManager(object):
             behav_grp.create_dataset(name='steps', data=self.steps[:, :self.counter['steps']], dtype='uint32')
             # behav_grp.create_dataset(name='steps_by_trial', data=self.steps_by_trial, dtype='uint32')
             behav_grp.create_dataset(name='track', data=self.track[:, :self.counter['track']], dtype='int32')
-            behav_grp.create_dataset(name='rail_end', data=self.rail_end, dtype='uint32')
+            behav_grp.create_dataset(name='rail_end', data=self.rail_end[:self.counter['rail_end']], dtype='uint32')
 
             # Store session parameters into behavior group
             behav_grp.attrs['start_time'] = self.start_time
