@@ -26,6 +26,7 @@ const int trackPinB   = 3;
 const int code_end = 0;
 const int code_conveyer_steps = 1;
 const int code_rail_end = 2;
+const int code_trail_start = 3;
 const int code_session_length = 6;
 const int code_track = 7;
 

@@ -473,6 +473,7 @@ class InputManager(object):
         # self.raster_steps.set_segments(blank_segments)
         
         # Initialize/clear old data
+        self.trial_onset = np.zeros((2, 1000), dtype='uint32')
         self.steps = np.zeros((2, 360000), dtype='uint32')
         self.track = np.zeros((2, 360000), dtype='int32')
         self.rail_end = np.zeros(int(self.parameters['session_duration']/10), dtype='uint32')
@@ -548,6 +549,7 @@ class InputManager(object):
         code_end = 0
         code_conveyer_steps = 1
         code_rail_end = 2
+        code_trial_start = 3
         code_session_length = 6
         code_track = 7
 
@@ -583,7 +585,7 @@ class InputManager(object):
                 # Record steps
                 self.steps[:, self.counter['steps']] = [ts, dist]
                 self.steps_by_trial[self.counter['trial']] += dist
-
+"""
                 ##### PLEASE CHECK THIS #####
                 trial_start_ix = self.counter['trial'] * self.num_rail_segments
                 trial_stop_ix = (self.counter['trial'] + 1) * self.num_rail_segments
@@ -600,7 +602,7 @@ class InputManager(object):
                     self.raster_steps.set_segments(segments)
                     self.plot_canvas.draw()
                 #############################
-
+"""
                 # Increment counter
                 self.counter['steps'] += 1
 
@@ -611,7 +613,7 @@ class InputManager(object):
                 # Update scoreboard
                 self.entry_rail_ends.delete(0, END)
                 self.entry_rail_ends.insert(0, np.count_nonzero(self.rail_end))
-                
+"""
                 # Create data to plot in raster
                 # Data includes 3rd point that is NaN to "disconnect" tick marks from neighboring ones.
                 trial_ts = ts - self.trial_onset[self.counter['trial']]
@@ -620,6 +622,11 @@ class InputManager(object):
                                      axis=1)
                 self.raster_rail_end[0].set_data(new_data)
                 self.plot_canvas.draw()
+"""
+                self.counter['trial'] += 1
+
+            elif code == code_trial_start:
+                self.trial_onset[self.counter['trial']] = ts
 
             elif code == code_session_length:
                 # Length of session
@@ -662,6 +669,7 @@ class InputManager(object):
 
         if data_file:
             behav_grp = data_file.create_group('behavior')
+            behav_grp.create_dataset(name='trials', data=self.trial_onset[:, :self.counter['trials']], dtype='uint32')
             behav_grp.create_dataset(name='steps', data=self.steps[:, :self.counter['steps']], dtype='uint32')
             behav_grp.create_dataset(name='steps_by_trial', data=self.steps_by_trial, dtype='uint32')
             behav_grp.create_dataset(name='track', data=self.track[:, :self.counter['track']], dtype='int32')
