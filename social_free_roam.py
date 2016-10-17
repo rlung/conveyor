@@ -105,12 +105,15 @@ class InputManager(object):
         # Stim frame
         stim_frame = Frame(core_session_frame)
         stim_frame.grid(row=1, column=0, sticky=E, padx=15, pady=5)
+        self.entry_interaction_dur = Entry(stim_frame, width=entry_width)
         self.entry_reset_cue_dur = Entry(stim_frame, width=entry_width)
         self.entry_reset_cue_freq = Entry(stim_frame, width=entry_width)
-        Label(stim_frame, text="Reset cue duration (ms): ", anchor=E).grid(row=0, column=0, sticky=E)
-        Label(stim_frame, text="Reset frequency (Hz): ", anchor=E).grid(row=1, column=0, sticky=E)
-        self.entry_reset_cue_dur.grid(row=0, column=1, sticky=W)
-        self.entry_reset_cue_freq.grid(row=1, column=1, sticky=W)
+        Label(stim_frame, text="Interaction duration (ms): ", anchor=E).grid(row=0, column=0, sticky=E)
+        Label(stim_frame, text="Reset cue duration (ms): ", anchor=E).grid(row=1, column=0, sticky=E)
+        Label(stim_frame, text="Reset frequency (Hz): ", anchor=E).grid(row=2, column=0, sticky=E)
+        self.entry_interaction_dur.grid(row=0, column=1, sticky=W)
+        self.entry_reset_cue_dur.grid(row=1, column=1, sticky=W)
+        self.entry_reset_cue_freq.grid(row=2, column=1, sticky=W)
 
         # Track frame
         track_frame = Frame(core_session_frame)
@@ -278,7 +281,7 @@ class InputManager(object):
         self.entry_end = Entry(scoreboard_frame, width=entry_width)
         self.entry_rail_ends = Entry(scoreboard_frame, width=entry_width)
         Label(scoreboard_frame, text="Session end:", bg='white', anchor=W).grid(row=0, sticky=W)
-        Label(scoreboard_frame, text="Rail ends:", bg='white', anchor=W).grid(row=1, sticky=W)
+        Label(scoreboard_frame, text="Rail ends:", bg='white', anchor=W).grid(row=2, sticky=W)
         self.entry_end.grid(row=1, sticky=W)
         self.entry_rail_ends.grid(row=3, sticky=W)
 
@@ -293,8 +296,12 @@ class InputManager(object):
                                        self.entry_session_dur,
                                        self.entry_presession,
                                        self.entry_postsession,
+                                       self.entry_interaction_dur,
                                        self.entry_reset_cue_dur,
                                        self.entry_reset_cue_freq,
+                                       self.entry_track_period,
+                                       self.entry_step_threshold,
+                                       self.entry_step_shift,
                                        self.radio_img_trial,
                                        self.radio_img_all,
                                        self.check_print]
@@ -317,7 +324,8 @@ class InputManager(object):
         self.entry_session_dur.insert(0, 1800000)
         self.entry_presession.insert(0, 60000)
         self.entry_postsession.insert(0, 60000)
-        self.entry_reset_cue_dur.insert(0, 3000)
+        self.entry_interaction_dur.insert(0, 10000)
+        self.entry_reset_cue_dur.insert(0, 1000)
         self.entry_reset_cue_freq.insert(0, 10000)
         self.entry_track_period.insert(0, 50)
         self.entry_step_threshold.insert(0, 0)
@@ -445,11 +453,13 @@ class InputManager(object):
         self.parameters['session_duration'] = int(self.entry_session_dur.get())
         self.parameters['presession_window'] = int(self.entry_presession.get())
         self.parameters['postsession_window'] = int(self.entry_postsession.get())
+        self.parameters['interaction_duration'] = int(self.entry_interaction_dur.get())
         self.parameters['reset_cue_duration'] = int(self.entry_reset_cue_dur.get())
         self.parameters['reset_cue_frequency'] = int(self.entry_reset_cue_freq.get())
         self.parameters['image_all'] = int(self.image_var.get())
         self.parameters['track_period'] = int(self.entry_track_period.get())
         self.parameters['step_threshold'] = int(self.entry_step_threshold.get())
+        self.parameters['step_shift'] = int(self.entry_step_shift.get())
 
         # Clear old data
         self.ax_total.cla()
@@ -473,7 +483,7 @@ class InputManager(object):
         # self.raster_steps.set_segments(blank_segments)
         
         # Initialize/clear old data
-        self.trial_onset = np.zeros((2, 1000), dtype='uint32')
+        self.trial_onset = np.zeros(1000, dtype='uint32')
         self.steps = np.zeros((2, 360000), dtype='uint32')
         self.track = np.zeros((2, 360000), dtype='int32')
         self.rail_end = np.zeros(int(self.parameters['session_duration']/10), dtype='uint32')
@@ -584,25 +594,8 @@ class InputManager(object):
 
                 # Record steps
                 self.steps[:, self.counter['steps']] = [ts, dist]
-                self.steps_by_trial[self.counter['trial']] += dist
-"""
-                ##### PLEASE CHECK THIS #####
-                trial_start_ix = self.counter['trial'] * self.num_rail_segments
-                trial_stop_ix = (self.counter['trial'] + 1) * self.num_rail_segments
-                segments = self.raster_steps.get_segments()
-                trial_line_segments = segments[trial_start_ix:trial_stop_ix]
-                rail_milestones_ahead = [segment[0, 0] < 0 for segment in trial_line_segments]  # rail segments to be passed (milestones)
-                rail_milestones_new = (self.steps_by_trial[self.counter['trial']] > rail_milestones) & \
-                                      rail_milestones_ahead
-                if np.any(rail_milestones_new):
-                    for nn, xx in enumerate(rail_milestones_new):
-                        if xx:
-                            trial_line_segments[nn][:, 0] = ts
-                    # trial_line_segments[rail_milestones_new], :, 0] = ts
-                    self.raster_steps.set_segments(segments)
-                    self.plot_canvas.draw()
-                #############################
-"""
+                # self.steps_by_trial[self.counter['trial']] += dist
+
                 # Increment counter
                 self.counter['steps'] += 1
 
@@ -613,16 +606,7 @@ class InputManager(object):
                 # Update scoreboard
                 self.entry_rail_ends.delete(0, END)
                 self.entry_rail_ends.insert(0, np.count_nonzero(self.rail_end))
-"""
-                # Create data to plot in raster
-                # Data includes 3rd point that is NaN to "disconnect" tick marks from neighboring ones.
-                trial_ts = ts - self.trial_onset[self.counter['trial']]
-                new_data = np.append(self.raster_rail_end[0].get_data(),
-                                     [[trial_ts] * 3, np.array([0, 1, np.nan]) + self.counter['trial']],
-                                     axis=1)
-                self.raster_rail_end[0].set_data(new_data)
-                self.plot_canvas.draw()
-"""
+
                 self.counter['trial'] += 1
 
             elif code == code_trial_start:
@@ -649,13 +633,6 @@ class InputManager(object):
 
                 # Record tracking
                 self.track[:, self.counter['track']] = [ts, dist]
-
-                # NEW ###############################################################
-                # Update raster plot
-                track_bnd = 15
-                if self.in_trial:
-                    trial_ts = ts - self.trial_onset[self.counter['trial']]
-                    # Update raster plot here #
                 
                 # Increment counter
                 self.counter['track'] += 1
@@ -669,9 +646,9 @@ class InputManager(object):
 
         if data_file:
             behav_grp = data_file.create_group('behavior')
-            behav_grp.create_dataset(name='trials', data=self.trial_onset[:, :self.counter['trials']], dtype='uint32')
+            behav_grp.create_dataset(name='trials', data=self.trial_onset[:self.counter['trial']], dtype='uint32')
             behav_grp.create_dataset(name='steps', data=self.steps[:, :self.counter['steps']], dtype='uint32')
-            behav_grp.create_dataset(name='steps_by_trial', data=self.steps_by_trial, dtype='uint32')
+            # behav_grp.create_dataset(name='steps_by_trial', data=self.steps_by_trial, dtype='uint32')
             behav_grp.create_dataset(name='track', data=self.track[:, :self.counter['track']], dtype='int32')
             behav_grp.create_dataset(name='rail_end', data=self.rail_end, dtype='uint32')
 
@@ -690,7 +667,7 @@ class InputManager(object):
         print "Session ended at " + end_time
 
         # Slack that session is done.
-        if self.entry_slack.get() & \
+        if self.entry_slack.get() and \
            slack:
             slack_msg(self.entry_slack.get(), "Session ended.")
 
@@ -816,6 +793,7 @@ def scan_serial(q, ser, parameters, print_arduino=False):
         try:
             input_split = map(int, input_arduino.split(','))
         except ValueError:
+            # If not all comma-separated values are int castable
             pass
         else:
             if input_arduino: q.put(input_split)

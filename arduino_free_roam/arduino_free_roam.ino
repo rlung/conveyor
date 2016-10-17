@@ -26,7 +26,7 @@ const int trackPinB   = 3;
 const int code_end = 0;
 const int code_conveyer_steps = 1;
 const int code_rail_end = 2;
-const int code_trail_start = 3;
+const int code_trial_start = 3;
 const int code_session_length = 6;
 const int code_track = 7;
 
@@ -35,7 +35,8 @@ unsigned long session;
 unsigned long preSession;
 unsigned long postSession;
 unsigned long tsEnd;
-unsigned int cueDur;
+unsigned long intxDur;
+unsigned long cueDur;
 unsigned int cueFreq;
 boolean imageAll;
 unsigned int trackPeriod;   // Time between stepper readings
@@ -73,7 +74,7 @@ void endSession(unsigned long ts) {
 
 // Retrieve parameters from serial
 void updateParams() {
-  const int paramNum = 9;
+  const int paramNum = 10;
   unsigned long parameters[paramNum];
   for (int p = 0; p < paramNum; p++) {
     parameters[p] = Serial.parseInt();
@@ -82,12 +83,13 @@ void updateParams() {
   session      = parameters[0];
   preSession   = parameters[1];
   postSession  = parameters[2];
-  cueDur       = parameters[3];
-  cueFreq      = parameters[4];
-  imageAll     = parameters[5];
-  trackPeriod  = parameters[6];
-  stepThresh   = parameters[7];
-  stepShift    = parameters[8];
+  intxDur      = parameters[3];
+  cueDur       = parameters[4];
+  cueFreq      = parameters[5];
+  imageAll     = parameters[6];
+  trackPeriod  = parameters[7];
+  stepThresh   = parameters[8];
+  stepShift    = parameters[9];
 }
 
 
@@ -155,7 +157,7 @@ void loop() {
   static unsigned long imgStartTS;      // Timestamp pin was last on
   static unsigned long imgStopTS;
   static unsigned long nextTrackTS = trackPeriod;
-  static unsigned long nextResetTS;
+  static unsigned long trialEnd;
   static boolean inSession;
   static boolean endOfRail;             // Indicates end of conveyer rail reached
   static boolean resetConveyer;
@@ -189,11 +191,17 @@ void loop() {
   // -- 1. SESSION TIMING -- //
   if (ts >= preSession &&
       ts <  preSession + session) {
-    inSession = true;
+    if (~inSession) {
+      // Serial.print(code_trial_start);
+      // Serial.print(DELIM);
+      // Serial.println(ts);
+      inSession = true;
+    }
 
     if (endOfRail &&
-        ts >= nextResetTS) {
+        ts >= trialEnd) {
       resetConveyer = true;
+      endOfRail = false;
     }
   }
   else if (ts >= preSession + session) {
@@ -207,10 +215,11 @@ void loop() {
   
   // -- 2. TRACK MOVEMENT -- //
   if (!endOfRail &&
-      digitalRead(railStopPin)) {
+      digitalRead(railStopPin) &&
+      !resetConveyer) {
     // End of track reached
     endOfRail = true;
-    nextResetTS = ts + trackPeriod;
+    trialEnd = ts + intxDur;
 
     // Relay to computer
     Serial.print(code_rail_end);
@@ -231,13 +240,17 @@ void loop() {
       Serial.println(trackOutVal);
 
       if (inSession &&
-          trackOutVal > stepThresh &&
+          (trackOutVal > (int)stepThresh) && // need to cast uint to int
           !resetConveyer &&
           !endOfRail) {
         
         byte steps2take = trackOutVal >> stepShift;
         if (steps2take > STEPMAX) {
           steps2take = STEPMAX;
+        }
+        else if (steps2take > trackOutVal)  {
+          // Case when bit shift goes "past" 0
+          steps2take = 0;
         }
 
         Serial1.write((byte)STEPCODE);
@@ -253,19 +266,27 @@ void loop() {
   // -- 3. RESET CONVEYER -- //
   // Need to make sure reset is fast enough to finish before next trial
   
+  static unsigned long nextResetTS;
+  
   if (resetConveyer) {
     // Stop when start of rail reached
+    
     if (digitalRead(railStartPin)) {
       resetConveyer = false;
       tone(speakerPin, cueFreq, cueDur);
+
+      Serial.print(code_trial_start);
+      Serial.print(DELIM);
+      Serial.println(ts);
     }
     else {
       if (ts >= nextResetTS) {
         Serial1.write((byte)STEPCODE);
         Serial1.write((byte)0);
         Serial1.write((byte)0);  // This value doesn't really matter
+        
+        nextResetTS = ts + trackPeriod;
       }
     }
   }
 }
-
