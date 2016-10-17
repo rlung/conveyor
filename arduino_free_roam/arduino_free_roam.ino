@@ -191,10 +191,10 @@ void loop() {
   // -- 1. SESSION TIMING -- //
   if (ts >= preSession &&
       ts <  preSession + session) {
-    if (~inSession) {
-      // Serial.print(code_trial_start);
-      // Serial.print(DELIM);
-      // Serial.println(ts);
+    if (!inSession) {
+      Serial.print(code_trial_start);
+      Serial.print(DELIM);
+      Serial.println(ts);
       inSession = true;
     }
 
