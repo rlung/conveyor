@@ -204,7 +204,8 @@ void loop() {
       endOfRail = false;
     }
   }
-  else if (ts >= preSession + session) {
+  else if (ts >= preSession + session &&
+           ts <  preSession + session + postSession) {
     inSession = false;
     resetConveyer = true;
   }
