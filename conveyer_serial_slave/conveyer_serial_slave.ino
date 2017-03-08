@@ -1,9 +1,9 @@
 /*
+conveyor-serial-slave
 
-Conveyer slave
-Randall Ung
-
-Uses serial protocol to communicate with "master" arduino to obtain parameters.
+Uses serial protocol to communicate with "master" arduino to obtain parameters. 
+Data is transmitted in 3 bytes. The first byte signifies the beginning of the 
+signal. The remaining two are the interval between steps and step amount.
 
 */
 
@@ -23,27 +23,30 @@ void loop() {
 
   if (Serial.available() >= 3) {
     
+    // Verify first byte is STEPCODE
     if (Serial.read() != STEPCODE) {
       return;
     }
 
+    // Collect remaining two bytes (interval and step)
     byte interval = Serial.read();
     int steps     = Serial.read();
     int speed;
     
-    // Values for moving backwards
-    // Wire doesn't transmit negative values. Resetting conveyers must
-    // be encoded differently (eg, 255, 255).
+    // Define stepping parameters
     if (interval == 0) {
-      // Reset rail parameters
-      speed = 125;
+      // Values for moving backwards
+      // Wire doesn't transmit negative values. Resetting conveyers must
+      // be encoded differently.
+      speed = 150;
       steps = -25;
     }
     else {
-      // Speed calculation based on 50-ms track interval and 200 steps/rotation.
-      // Calculation: rot/min = steps(steps2take) / interval(50ms) * 60000 ms/min / steps/rot(200)
-      // Max number of steps is constrained by byte max (255) and max allowed 
-      // for step speed (assuming speed = steps * 6 thus 255/6 = 42).
+      // Speed is set as function of steps. Want to complete number of `steps` 
+      // within alotted `interval`.
+      //   Speed calculation:
+      //   rot/min = steps / interval * 60000 ms/min / steps/rot
+      // (Interval is typically 50 ms.)
       speed = steps * 300 / interval;
 
       // Relay confirmation data was received
@@ -51,93 +54,9 @@ void loop() {
       Serial.write(steps);
     }
 
+    // Move motor
     trackStepper.setSpeed(speed);
     trackStepper.step(steps);
   }
 
 }
-
-/*
-void loop() {
-
-  if (Serial.available() >= 3) {
-    if (Serial.parseInt() != STEPCODE) {
-      return;
-    }
-    byte interval = Serial.parseInt();
-    int steps     = Serial.parseInt();
-    int speed;
-
-    Serial.print("interval: ");
-    Serial.print(interval);
-    Serial.print(" | steps: ");
-    Serial.println(steps);
-    
-    // Values for moving backwards
-    // Wire doesn't transmit negative values. Resetting conveyers must
-    // be encoded differently (eg, 255, 255).
-    if (interval == 0) {
-      Serial.println("Moving back.");
-      speed = 180;
-      steps = -25;
-    }
-    else {
-      // Speed calculation based on 50-ms track interval and 200 steps/rotation.
-      // Calculation: rot/min = steps(steps2take) / interval(50ms) * 60000 ms/min / steps/rot(200)
-      // Max number of steps is constrained by byte max (255) and max allowed 
-      // for step speed (assuming speed = steps * 6 thus 255/6 = 42).
-      speed = steps * 300/interval;
-
-      // Relay confirmation data was received
-      Serial.write(STEPCODE);
-      Serial.write(steps);
-    }
-
-    Serial.print("interval: ");
-    Serial.print(interval);
-    Serial.print(" | steps: ");
-    Serial.print(steps);
-    Serial.print(" | speed: ");
-    Serial.println(speed);
-
-    trackStepper.setSpeed(speed);
-    trackStepper.step(steps);
-  }
-
-}
-
-
-void loop() {
-
-  if (Serial.available() >= 3) {
-    if (Serial.read() != STEPCODE) {
-      return;
-    }
-    byte interval = Serial.read();
-    int steps     = Serial.read();
-    int speed;
-    
-    // Values for moving backwards
-    // Necessary bc negative values are not transmitted
-    if (interval == 0) {
-      speed = 180;
-      steps = -25;
-    }
-    else {
-      // Speed calculation based on 50-ms track interval and 200 steps/rotation.
-      // Calculation: rot/min = steps(steps2take) / interval(50ms) * 60000 ms/min / steps/rot(200)
-      // Max number of steps is constrained by byte max (255) and max allowed 
-      // for step speed (assuming speed = steps * 6 thus 255/6 = 42).
-      speed = steps * 300/interval;
-
-      // Relay confirmation data was received
-      Serial.write(STEPCODE);
-      Serial.write(steps);
-    }
-
-    trackStepper.setSpeed(speed);
-    trackStepper.step(steps);
-  }
-
-}
-*/
