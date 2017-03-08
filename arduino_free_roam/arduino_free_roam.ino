@@ -191,10 +191,10 @@ void loop() {
   // -- 1. SESSION TIMING -- //
   if (ts >= preSession &&
       ts <  preSession + session) {
-    if (~inSession) {
-      // Serial.print(code_trial_start);
-      // Serial.print(DELIM);
-      // Serial.println(ts);
+    if (!inSession) {
+      Serial.print(code_trial_start);
+      Serial.print(DELIM);
+      Serial.println(ts);
       inSession = true;
     }
 
@@ -204,7 +204,8 @@ void loop() {
       endOfRail = false;
     }
   }
-  else if (ts >= preSession + session) {
+  else if (ts >= preSession + session &&
+           ts <  preSession + session + postSession) {
     inSession = false;
     resetConveyer = true;
   }
