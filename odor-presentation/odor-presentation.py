@@ -216,6 +216,7 @@ class InputManager(object):
             self.button_open_port,
             self.entry_trial_dur,
             self.entry_track_period,
+            self.check_conveyor_away,
             self.check_print
         ]
         # Boolean of objects in list above that should be enabled when time...
