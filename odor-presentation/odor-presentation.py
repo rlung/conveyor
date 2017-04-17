@@ -7,7 +7,8 @@ Creates GUI to control behavioral and imaging devices for in vivo calcium
 imaging. Script interfaces with Arduino microcontroller and imaging devices.
 """
 
-from Tkinter import *
+# from Tkinter import *
+import Tkinter as tk
 import tkMessageBox
 import tkFileDialog
 import collections
@@ -29,6 +30,7 @@ from matplotlib.colors import LinearSegmentedColormap
 from matplotlib import style
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2TkAgg
 import seaborn as sns
+from instrumental import instrument, list_instruments
 import pdb
 
 
@@ -41,10 +43,17 @@ if os.path.isfile(key_file):
 else:
     slack = None
 
+subsamp = {1: 1,
+           2: 2,
+           3: 4,
+           4: 8}
 
-class InputManager(object):
+
+class InputManager(tk.Frame):
 
     def __init__(self, parent):
+        tk.Frame.__init__(self, parent)
+
         # GUI layout
         # parent
         # - parameter_frame
@@ -63,6 +72,11 @@ class InputManager(object):
         #   + scoreboard_frame
 
         entry_width = 10
+        ew = 10  # Width of Entry UI
+        px = 15
+        py = 5
+        px1 = 5
+        py1 = 2
 
         self.parent = parent
         parent.columnconfigure(0, weight=1)
@@ -70,107 +84,132 @@ class InputManager(object):
         ###########################
         ##### PARAMETER FRAME #####
         ###########################
-        parameter_frame = Frame(parent)
+        parameter_frame = tk.Frame(parent)
         parameter_frame.grid(row=0, column=0)
 
         ###### SESSION SETTINGS FRAME ######
-        session_frame = Frame(parameter_frame)
+        session_frame = tk.Frame(parameter_frame)
         session_frame.grid(row=0, column=0, rowspan=2, padx=15, pady=5)
 
-        core_session_frame = Frame(session_frame)
+        core_session_frame = tk.Frame(session_frame)
         core_session_frame.grid(row=0, column=0)
 
         # Session frame
-        session_prop_frame = Frame(core_session_frame)
-        session_prop_frame.grid(row=0, column=0, sticky=E, padx=15, pady=5)
-        self.entry_trial_dur = Entry(session_prop_frame, width=entry_width)
-        Label(session_prop_frame, text="Trial duration: ", anchor=E).grid(row=0, column=0, sticky=E)
-        self.entry_trial_dur.grid(row=0, column=1, sticky=W)
+        session_prop_frame = tk.Frame(core_session_frame)
+        session_prop_frame.grid(row=0, column=0, sticky=tk.E, padx=15, pady=5)
+        self.entry_trial_dur = tk.Entry(session_prop_frame, width=entry_width)
+        tk.Label(session_prop_frame, text="Trial duration: ", anchor=tk.E).grid(row=0, column=0, sticky=tk.E)
+        self.entry_trial_dur.grid(row=0, column=1, sticky=tk.W)
 
         # Track frame
-        track_frame = Frame(core_session_frame)
-        track_frame.grid(row=2, column=0, sticky=E, padx=15, pady=5)
-        self.entry_track_period = Entry(track_frame, width=entry_width)
-        Label(track_frame, text="Track period (ms): ", anchor=E).grid(row=0, column=0, sticky=E)
-        self.entry_track_period.grid(row=0, column=1, sticky=W)
+        track_frame = tk.Frame(core_session_frame)
+        track_frame.grid(row=2, column=0, sticky=tk.E, padx=15, pady=5)
+        self.entry_track_period = tk.Entry(track_frame, width=entry_width)
+        tk.Label(track_frame, text="Track period (ms): ", anchor=tk.E).grid(row=0, column=0, sticky=tk.E)
+        self.entry_track_period.grid(row=0, column=1, sticky=tk.W)
         
-        # Optional settings frame
-        opt_session_frame = Frame(session_frame)
+        # Options frame
+        opt_session_frame = tk.Frame(session_frame)
         opt_session_frame.grid(row=0, column=1)
 
-        conveyor_frame = LabelFrame(opt_session_frame, text="Conveyor")
-        conveyor_frame.grid(row=0, column=0, padx=10, pady=5, sticky=W+E)
-        self.conveyor_away_var = BooleanVar()
-        self.check_conveyor_away = Checkbutton(
+        conveyor_frame = tk.LabelFrame(opt_session_frame, text="Conveyor")
+        conveyor_frame.grid(row=0, column=0, padx=10, pady=5, sticky=tk.W+tk.E)
+        self.conveyor_away_var = tk.BooleanVar()
+        self.check_conveyor_away = tk.Checkbutton(
             conveyor_frame,
             text="Set conveyor away",
             variable=self.conveyor_away_var)
         self.check_conveyor_away.grid(row=0, column=0)
 
-        debug_frame = LabelFrame(opt_session_frame, text="Debugging")
-        debug_frame.grid(row=1, column=0, padx=10, pady=5, sticky=W+E)
-        self.print_var = BooleanVar()
-        self.check_print = Checkbutton(debug_frame, text="Print Arduino output", variable=self.print_var)
+        # UI for camera
+        self.frame_cam = tk.LabelFrame(opt_session_frame, text="Camera")
+        self.frame_cam.grid(row=1, column=0, padx=px, pady=py, sticky=tk.W+tk.E)
+
+        self.var_fps = tk.IntVar()
+        self.var_vsub = tk.IntVar()
+        self.var_hsub = tk.IntVar()
+        self.var_gain = tk.IntVar()
+        self.var_expo = tk.IntVar()
+        self.var_instr = tk.StringVar()
+        self.option_instr = tk.OptionMenu(self.frame_cam,
+            self.var_instr, [])
+        self.option_instr.configure(anchor=tk.W)
+        self.button_refresh_instr = tk.Button(self.frame_cam,
+            text="Update", command=self.update_instruments)
+        self.button_preview = tk.Button(self.frame_cam,
+            text="Preview", command=self.cam_preview)
+        self.option_instr.grid(row=1, column=0, columnspan=2, padx=px1, pady=py1, sticky=tk.W)
+        self.button_refresh_instr.grid(row=2, column=0, padx=px1, pady=py1, sticky=tk.W)
+        self.button_preview.grid(row=2, column=1, padx=px1, pady=py1, sticky=tk.W)
+        self.instrument_panels = [
+            self.option_instr,
+            self.button_refresh_instr,
+        ]
+
+        debug_frame = tk.LabelFrame(opt_session_frame, text="Debugging")
+        debug_frame.grid(row=2, column=0, padx=10, pady=5, sticky=tk.W+tk.E)
+        self.print_var = tk.BooleanVar()
+        self.check_print = tk.Checkbutton(debug_frame, text="Print Arduino output", variable=self.print_var)
         self.check_print.grid(row=0, column=0)
 
         ###### SERIAL FRAME ######
-        serial_frame = Frame(parameter_frame)
-        serial_frame.grid(row=0, column=1, padx=5, pady=5, sticky=W+E)
+        serial_frame = tk.Frame(parameter_frame)
+        serial_frame.grid(row=0, column=1, padx=5, pady=5, sticky=tk.W+tk.E)
         self.ser = None
-        self.port_var = StringVar()
+        self.port_var = tk.StringVar()
 
-        serial_ports_frame = Frame(serial_frame)
-        serial_ports_frame.grid(row=0, column=0, columnspan=2, sticky=W)
-        Label(serial_ports_frame, text="Serial port:").grid(row=0, column=0, sticky=E, padx=5)
-        self.option_ports = OptionMenu(serial_ports_frame, self.port_var, [])
-        self.option_ports.grid(row=0, column=1, sticky=W+E, padx=5)
-        Label(serial_ports_frame, text="Serial status:").grid(row=1, column=0, sticky=E, padx=5)
-        self.entry_serial_status = Entry(serial_ports_frame)
-        self.entry_serial_status.grid(row=1, column=1, sticky=W, padx=5)
-        self.entry_serial_status['state'] = NORMAL
+        serial_ports_frame = tk.Frame(serial_frame)
+        serial_ports_frame.grid(row=0, column=0, columnspan=2, sticky=tk.W)
+        tk.Label(serial_ports_frame, text="Serial port:").grid(row=0, column=0, sticky=tk.E, padx=5)
+        self.option_ports = tk.OptionMenu(serial_ports_frame, self.port_var, [])
+        self.option_ports.grid(row=0, column=1, sticky=tk.W+tk.E, padx=5)
+        tk.Label(serial_ports_frame, text="Serial status:").grid(row=1, column=0, sticky=tk.E, padx=5)
+        self.entry_serial_status = tk.Entry(serial_ports_frame)
+        self.entry_serial_status.grid(row=1, column=1, sticky=tk.W, padx=5)
+        self.entry_serial_status['state'] = 'normal'
         self.entry_serial_status.insert(0, 'Closed')
         self.entry_serial_status['state'] = 'readonly'
 
-        open_close_frame = Frame(serial_frame)
+        open_close_frame = tk.Frame(serial_frame)
         open_close_frame.grid(row=1, column=0, columnspan=2, pady=10)
-        self.button_open_port = Button(open_close_frame, text="Open", command=self.open_serial)
-        self.button_close_port = Button(open_close_frame, text="Close", command=self.close_serial)
-        self.button_update_ports = Button(open_close_frame, text="Update", command=self.update_ports)
+        self.button_open_port = tk.Button(open_close_frame, text="Open", command=self.open_serial)
+        self.button_close_port = tk.Button(open_close_frame, text="Close", command=self.close_serial)
+        self.button_update_ports = tk.Button(open_close_frame, text="Update", command=self.update_ports)
         self.button_open_port.grid(row=0, column=0, pady=5)
         self.button_close_port.grid(row=0, column=1, padx=10, pady=5)
         self.button_update_ports.grid(row=0, column=2, pady=5)
 
         ###### SLACK FRAME #####
-        slack_frame = Frame(parameter_frame)
-        slack_frame.grid(row=1, column=1, padx=5, pady=5, sticky=W+E)
-        Label(slack_frame, text="Slack address for notifications: ", anchor=W).grid(row=0, column=0, sticky=W+E)
-        self.entry_slack = Entry(slack_frame)
-        self.entry_slack.grid(row=1, column=0, sticky=N+S+W+E)
-        self.button_slack = Button(slack_frame, text="Test", command=lambda: slack_msg(self.entry_slack.get(), "Test", test=True))
-        self.button_slack.grid(row=1, column=1, padx=5, sticky=W)
+        slack_frame = tk.Frame(parameter_frame)
+        slack_frame.grid(row=1, column=1, padx=5, pady=5, sticky=tk.W+tk.E)
+        tk.Label(slack_frame, text="Slack address for notifications: ", anchor=tk.W).grid(row=0, column=0, sticky=tk.W+tk.E)
+        self.entry_slack = tk.Entry(slack_frame)
+        self.entry_slack.grid(row=1, column=0, sticky=tk.N+tk.S+tk.W+tk.E)
+        self.button_slack = tk.Button(slack_frame, text="Test", command=lambda: slack_msg(self.entry_slack.get(), "Test", test=True))
+        self.button_slack.grid(row=1, column=1, padx=5, sticky=tk.W)
 
         ##### START FRAME #####
-        start_frame = Frame(parameter_frame)
-        start_frame.grid(row=3, column=0, columnspan=2, padx=5, pady=15, sticky=W+E)
+        start_frame = tk.Frame(parameter_frame)
+        start_frame.grid(row=3, column=0, columnspan=2, padx=5, pady=15, sticky=tk.W+tk.E)
         start_frame.columnconfigure(0, weight=4)
 
-        Label(start_frame, text="File to save data:", anchor=W).grid(row=0, column=0, sticky=W)
-        self.stop = BooleanVar()
+        tk.Label(start_frame, text="File to save data:", anchor=tk.W).grid(row=0, column=0, sticky=tk.W)
+        self.stop = tk.BooleanVar()
         self.stop.set(False)
-        self.entry_save = Entry(start_frame)
-        self.button_save_file = Button(start_frame, text="...", command=self.get_save_file)
-        self.button_start = Button(start_frame, text="Start", command=lambda: self.parent.after(0, self.start))
-        self.button_stop = Button(start_frame, text="Stop", command=lambda: self.stop.set(True))
-        self.entry_save.grid(row=1, column=0, sticky=N+S+W+E)
+        self.entry_save = tk.Entry(start_frame)
+        self.button_save_file = tk.Button(start_frame, text="...", command=self.get_save_file)
+        self.button_start = tk.Button(start_frame, text="Start", command=lambda: self.parent.after(0, self.start))
+        self.button_stop = tk.Button(start_frame, text="Stop", command=lambda: self.stop.set(True))
+        self.entry_save.grid(row=1, column=0, sticky=tk.N+tk.S+tk.W+tk.E)
         self.button_save_file.grid(row=1, column=1, padx=5)
-        self.button_start.grid(row=1, column=2, sticky=N+S, padx=5)
-        self.button_stop.grid(row=1, column=3, sticky=N+S, padx=5)
+        self.button_start.grid(row=1, column=2, sticky=tk.N+tk.S, padx=5)
+        self.button_stop.grid(row=1, column=3, sticky=tk.N+tk.S, padx=5)
 
         ###########################
         ###### MONITOR FRAME ######
         ###########################
-        monitor_frame = Frame(parent, bg='white')
-        monitor_frame.grid(row=1, column=0, sticky=W+E+N+S)
+        monitor_frame = tk.Frame(parent, bg='white')
+        monitor_frame.grid(row=1, column=0, sticky=tk.W+tk.E+tk.N+tk.S)
         monitor_frame.columnconfigure(0, weight=4)
 
         ##### PLOTS #####
@@ -191,17 +230,17 @@ class InputManager(object):
         self.plot_canvas = FigureCanvasTkAgg(self.fig, monitor_frame)
         self.fig.tight_layout()
         self.plot_canvas.show()
-        self.plot_canvas.get_tk_widget().grid(row=0, column=0, rowspan=2, sticky=W+E+N+S)
+        self.plot_canvas.get_tk_widget().grid(row=0, column=0, rowspan=2, sticky=tk.W+tk.E+tk.N+tk.S)
 
         ##### SCOREBOARD #####
-        scoreboard_frame = Frame(monitor_frame, bg='white')
-        scoreboard_frame.grid(row=0, column=1, padx=20, sticky=N)
-        self.entry_start = Entry(scoreboard_frame, width=entry_width)
-        self.entry_end = Entry(scoreboard_frame, width=entry_width)
-        Label(scoreboard_frame, text="Session Start:", bg='white', anchor=W).grid(row=0, sticky=W)
-        Label(scoreboard_frame, text="Session end:", bg='white', anchor=W).grid(row=2, sticky=W)
-        self.entry_start.grid(row=1, sticky=W)
-        self.entry_end.grid(row=3, sticky=W)
+        scoreboard_frame = tk.Frame(monitor_frame, bg='white')
+        scoreboard_frame.grid(row=0, column=1, padx=20, sticky=tk.N)
+        self.entry_start = tk.Entry(scoreboard_frame, width=entry_width)
+        self.entry_end = tk.Entry(scoreboard_frame, width=entry_width)
+        tk.Label(scoreboard_frame, text="Session start:", bg='white', anchor=tk.W).grid(row=0, sticky=tk.W)
+        tk.Label(scoreboard_frame, text="Session end:", bg='white', anchor=tk.W).grid(row=2, sticky=tk.W)
+        self.entry_start.grid(row=1, sticky=tk.W)
+        self.entry_end.grid(row=3, sticky=tk.W)
 
         self.scoreboard_objs = [
             self.entry_start,
@@ -237,18 +276,24 @@ class InputManager(object):
             self.button_stop
         ]
 
-        # Update list of available ports
+        # Update
         self.update_ports()
+        self.update_instruments()
 
         # Default values
         self.entry_trial_dur.insert(0, 60000)
         self.conveyor_away_var.set(True)
         self.entry_track_period.insert(0, 50)
         self.print_var.set(True)
-        self.button_close_port['state'] = DISABLED
+        self.button_close_port['state'] = 'disabled'
         # self.entry_slack.insert(0, "@randall")
-        self.button_start['state'] = DISABLED
-        self.button_stop['state'] = DISABLED
+        self.button_start['state'] = 'disabled'
+        self.button_stop['state'] = 'disabled'
+        self.var_fps.set(5)
+        self.var_vsub.set(2)
+        self.var_hsub.set(2)
+        self.var_gain.set(10)
+        self.var_expo.set(100)
 
         ###### SESSION VARIABLES ######
         self.parameters = collections.OrderedDict()
@@ -259,13 +304,133 @@ class InputManager(object):
         self.q = Queue()
         self.gui_update_ct = 0  # count number of times GUI has been updated
 
+    def update_instruments(self):
+        instrs = list_instruments()
+        menu = self.option_instr['menu']
+        menu.delete(0, tk.END)
+        if instrs:
+            for instr in instrs:
+                menu.add_command(label=instr.name, command=lambda x=instr.name: self.var_instr.set(x))
+            self.var_instr.set(instrs[0].name)
+        else:
+            self.var_instr.set("No instruments found")
+
+    def cam_start(self):
+        instrs = list_instruments()
+        instr = [x for x in instrs if x.name == self.var_instr.get()]
+        if instr:
+            self.cam = instrument(instr[0])
+            # self.cam.start_live
+        else:
+            return 1
+
+    def cam_close(self):
+        # self.cam.close()
+        pass
+
+    def cam_preview(self):
+        self.window_cam = tk.Toplevel(self)
+        self.window_cam.wm_title("Camera preview")
+
+        self.cam_start()
+        
+        frame_preview = tk.Frame(self.window_cam)
+        frame_preview.grid(row=0)
+        fig, self.ax = plt.subplots(figsize=(1280./1024 * 4.8, 4.8))
+        fig.subplots_adjust(left=0, bottom=0, right=1, top=1, wspace=0, hspace=0)
+        self.im = self.ax.imshow(np.zeros((1024, 1280)), vmin=1, vmax=254, cmap='gray', interpolation='none')
+        self.im.cmap.set_under('b')
+        self.im.cmap.set_over('r')
+        self.ax.axis('image')
+        self.ax.axis('off')
+        self.canvas = FigureCanvasTkAgg(fig, frame_preview)
+        self.canvas.show()
+        self.canvas.get_tk_widget().grid(row=0, column=0, sticky=tk.W+tk.E+tk.N+tk.S)
+
+        frame_settings = tk.Frame(self.window_cam)
+        frame_settings.grid(row=1)
+        tk.Label(frame_settings, text="FPS: ", anchor=tk.E).grid(row=1, column=0, sticky=tk.E)
+        tk.Label(frame_settings, text="Vertical subsampling: ", anchor=tk.E).grid(row=2, column=0, sticky=tk.E)
+        tk.Label(frame_settings, text="Horizontal subsampling: ", anchor=tk.E).grid(row=3, column=0, sticky=tk.E)
+        tk.Label(frame_settings, text="Gain: ", anchor=tk.E).grid(row=4, column=0, sticky=tk.E)
+        tk.Label(frame_settings, text="Exposure (% of frame): ", anchor=tk.E).grid(row=5, column=0, sticky=tk.E)
+        scale_fps = tk.Scale(frame_settings, orient='horizontal', from_=1, to=60,
+            command=self.var_fps.set)
+        scale_vsub = tk.Scale(frame_settings, orient='horizontal', from_=1, to=4,
+            command=self.var_vsub.set)
+        scale_hsub = tk.Scale(frame_settings, orient='horizontal', from_=1, to=4,
+            command=self.var_hsub.set)
+        scale_gain = tk.Scale(frame_settings, orient='horizontal', from_=0, to=100,
+            command=self.var_gain.set)
+        scale_expo = tk.Scale(frame_settings, orient='horizontal', from_=0, to=100,
+            command=self.var_expo.set)
+        scale_fps.set(self.var_fps.get())
+        scale_vsub.set(self.var_vsub.get())
+        scale_hsub.set(self.var_hsub.get())
+        scale_gain.set(self.var_gain.get())
+        scale_expo.set(self.var_expo.get())
+        scale_fps.grid(row=1, column=1, sticky=tk.W+tk.E)
+        scale_vsub.grid(row=2, column=1, sticky=tk.W+tk.E)
+        scale_hsub.grid(row=3, column=1, sticky=tk.W+tk.E)
+        scale_gain.grid(row=4, column=1, sticky=tk.W+tk.E)
+        scale_expo.grid(row=5, column=1, sticky=tk.W+tk.E)
+
+        frame_status = tk.Frame(self.window_cam)
+        frame_status.grid(row=2)
+        self.entry_status = tk.Entry(frame_status, foreground='red')
+        self.entry_status.grid()
+
+        self.refresh_preview()
+
+        def close_protocol():
+            self.cam_close()
+            self.window_cam.destroy()
+            self.window_cam = None
+
+        self.window_cam.protocol('WM_DELETE_WINDOW', close_protocol)
+        self.window_cam.transient(self)
+        self.window_cam.grab_set()
+        self.wait_window(self.window_cam)
+
+    def refresh_preview(self):
+        start_time = time.clock()
+        frame_dur = 1000. / self.var_fps.get()
+
+        if not self.window_cam:
+            return
+
+        exposure_time = frame_dur * self.var_expo.get()/100.
+        im = self.cam.grab_image(
+            vsub=subsamp[self.var_vsub.get()],
+            hsub=subsamp[self.var_hsub.get()],
+            gain=self.var_gain.get(),
+            exposure_time='{}ms'.format(exposure_time))
+        too_fast = True if time.clock() - start_time > frame_dur / 1000. else False
+        self.im.set_data(im)
+        self.ax.set_ylim(0, 1024/subsamp[self.var_vsub.get()])
+        self.ax.set_xlim(0, 1280/subsamp[self.var_hsub.get()])
+        self.canvas.draw()
+
+        time_left = frame_dur / 1000. - (time.clock() - start_time)
+        print time_left
+        if time_left >= 0:
+            self.entry_status.delete(0, tk.END)
+            self.parent.after(int(time_left), self.refresh_preview)
+        else:
+            print "too fast"
+            self.entry_status.delete(0, tk.END)
+            if too_fast:
+                self.entry_status.insert(0, "Recording too fast")
+            self.parent.after(0, self.refresh_preview)
+
+
     def update_ports(self):
         ports_info = list(serial.tools.list_ports.comports())
         ports = [port.device for port in ports_info]
         ports_description = [port.description for port in ports_info]
 
         menu = self.option_ports['menu']
-        menu.delete(0, END)
+        menu.delete(0, tk.END)
         if ports:
             for port, description in zip(ports, ports_description):
                 menu.add_command(label=description, command=lambda com=port: self.port_var.set(com))
@@ -281,7 +446,7 @@ class InputManager(object):
                 ("All files", "*.*")
             ]
         )
-        self.entry_save.delete(0, END)
+        self.entry_save.delete(0, tk.END)
         self.entry_save.insert(0, save_file)
 
     def gui_util(self, option):
@@ -291,54 +456,54 @@ class InputManager(object):
         if option == 'open':
             for i, obj in enumerate(self.obj_to_disable_at_open):
                 # Determine current state of object                
-                if obj['state'] == DISABLED:
+                if obj['state'] == 'disabled':
                     self.obj_enabled_at_open[i] = False
                 else:
                     self.obj_enabled_at_open[i] = True
                 
                 # Disable object
-                obj['state'] = DISABLED
+                obj['state'] = 'disabled'
 
-            self.entry_serial_status.config(state=NORMAL, fg='red')
-            self.entry_serial_status.delete(0, END)
+            self.entry_serial_status.config(state='normal', fg='red')
+            self.entry_serial_status.delete(0, tk.END)
             self.entry_serial_status.insert(0, 'Opening...')
             self.entry_serial_status['state'] = 'readonly'
 
         elif option == 'opened':
             # Enable start objects
             for obj in self.obj_to_enable_at_open:
-                obj['state'] = NORMAL
+                obj['state'] = 'normal'
 
-            self.entry_serial_status.config(state=NORMAL, fg='black')
-            self.entry_serial_status.delete(0, END)
+            self.entry_serial_status.config(state='normal', fg='black')
+            self.entry_serial_status.delete(0, tk.END)
             self.entry_serial_status.insert(0, 'Opened')
             self.entry_serial_status['state'] = 'readonly'
 
         elif option == 'close':
             for obj, to_enable in zip(self.obj_to_disable_at_open, self.obj_enabled_at_open):
-                if to_enable: obj['state'] = NORMAL         # NOT SURE IF THAT'S CORRECT
+                if to_enable: obj['state'] = 'normal'         # NOT SURE IF THAT'S CORRECT
             for obj in self.obj_to_enable_at_open:
-                obj['state'] = DISABLED
+                obj['state'] = 'disabled'
 
-            self.entry_serial_status.config(state=NORMAL, fg='black')
-            self.entry_serial_status.delete(0, END)
+            self.entry_serial_status.config(state='normal', fg='black')
+            self.entry_serial_status.delete(0, tk.END)
             self.entry_serial_status.insert(0, 'Closed')
             self.entry_serial_status['state'] = 'readonly'
 
         elif option == 'start':
             for obj in self.obj_to_disable_at_start:
-                obj['state'] = DISABLED
+                obj['state'] = 'disabled'
             for obj in self.obj_to_enable_at_start:
-                obj['state'] = NORMAL
+                obj['state'] = 'normal'
 
         elif option == 'stop':
             for obj in self.obj_to_disable_at_start:
-                obj['state'] = NORMAL
+                obj['state'] = 'normal'
             for obj in self.obj_to_enable_at_start:
-                obj['state'] = DISABLED
+                obj['state'] = 'disabled'
 
-            self.entry_serial_status.config(state=NORMAL, fg='black')
-            self.entry_serial_status.delete(0, END)
+            self.entry_serial_status.config(state='normal', fg='black')
+            self.entry_serial_status.delete(0, tk.END)
             self.entry_serial_status.insert(0, 'Closed')
             self.entry_serial_status['state'] = 'readonly'
 
@@ -359,7 +524,7 @@ class InputManager(object):
         self.ax.set_xlim(0, self.parameters['trial_duration'])
         self.plot_canvas.draw()
         for obj in self.scoreboard_objs:
-            obj.delete(0, END)
+            obj.delete(0, tk.END)
         
         # Initialize/clear old data
         self.trial_onset = np.zeros(1000, dtype='uint32')
@@ -624,11 +789,12 @@ def scan_serial(q, ser, parameters, print_arduino=False):
 
 def main():
     # GUI
-    root = Tk()
+    root = tk.Tk()
     root.wm_title("Odor presentation")
     if os.name == 'nt':
         root.iconbitmap(os.path.join(os.getcwd(), 'neuron.ico'))
     InputManager(root)
+    root.grid()
     root.mainloop()
 
 
