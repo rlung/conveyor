@@ -408,8 +408,8 @@ class InputManager(tk.Frame):
             exposure_time='{}ms'.format(exposure_time))
         too_fast = True if time.clock() - start_time > frame_dur / 1000. else False
         self.im.set_data(im)
-        self.ax.set_ylim(0, 1024/subsamp[self.var_vsub.get()])
-        self.ax.set_xlim(0, 1280/subsamp[self.var_hsub.get()])
+        self.ax.set_ylim(0, self.cam.height)
+        self.ax.set_xlim(0, self.cam.width)
         self.fig.canvas.draw_idle()
 
         # time_left = frame_dur / 1000. - (time.clock() - start_time)
@@ -794,8 +794,8 @@ def main():
     # GUI
     root = tk.Tk()
     root.wm_title("Odor presentation")
-    if os.name == 'nt':
-        root.iconbitmap(os.path.join(os.getcwd(), 'neuron.ico'))
+    # if os.name == 'nt':
+    #     root.iconbitmap(os.path.join(os.getcwd(), 'neuron.ico'))
     InputManager(root)
     root.grid()
     root.mainloop()
