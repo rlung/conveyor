@@ -30,6 +30,7 @@ from matplotlib.colors import LinearSegmentedColormap
 from matplotlib import style
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2TkAgg
 import seaborn as sns
+from PIL import Image, ImageTk
 from instrumental import instrument, list_instruments
 import pdb
 
@@ -336,14 +337,14 @@ class InputManager(tk.Frame):
         
         frame_preview = tk.Frame(self.window_cam)
         frame_preview.grid(row=0)
-        fig, self.ax = plt.subplots(figsize=(1280./1024 * 4.8, 4.8))
-        fig.subplots_adjust(left=0, bottom=0, right=1, top=1, wspace=0, hspace=0)
+        self.fig, self.ax = plt.subplots(figsize=(1280./1024 * 4.8, 4.8))
+        self.fig.subplots_adjust(left=0, bottom=0, right=1, top=1, wspace=0, hspace=0)
         self.im = self.ax.imshow(np.zeros((1024, 1280)), vmin=1, vmax=254, cmap='gray', interpolation='none')
         self.im.cmap.set_under('b')
         self.im.cmap.set_over('r')
         self.ax.axis('image')
         self.ax.axis('off')
-        self.canvas = FigureCanvasTkAgg(fig, frame_preview)
+        self.canvas = FigureCanvasTkAgg(self.fig, frame_preview)
         self.canvas.show()
         self.canvas.get_tk_widget().grid(row=0, column=0, sticky=tk.W+tk.E+tk.N+tk.S)
 
@@ -409,19 +410,21 @@ class InputManager(tk.Frame):
         self.im.set_data(im)
         self.ax.set_ylim(0, 1024/subsamp[self.var_vsub.get()])
         self.ax.set_xlim(0, 1280/subsamp[self.var_hsub.get()])
-        self.canvas.draw()
+        self.fig.canvas.draw_idle()
 
-        time_left = frame_dur / 1000. - (time.clock() - start_time)
-        print time_left
-        if time_left >= 0:
-            self.entry_status.delete(0, tk.END)
-            self.parent.after(int(time_left), self.refresh_preview)
-        else:
-            print "too fast"
-            self.entry_status.delete(0, tk.END)
-            if too_fast:
-                self.entry_status.insert(0, "Recording too fast")
-            self.parent.after(0, self.refresh_preview)
+        # time_left = frame_dur / 1000. - (time.clock() - start_time)
+        # print time_left
+        # if time_left >= 0:
+        #     self.entry_status.delete(0, tk.END)
+        #     self.parent.after(int(time_left), self.refresh_preview)
+        # else:
+        #     print "too fast"
+        #     self.entry_status.delete(0, tk.END)
+        #     if too_fast:
+        #         self.entry_status.insert(0, "Recording too fast")
+        #     self.parent.after(0, self.refresh_preview)
+
+        self.parent.after(200, self.refresh_preview)
 
 
     def update_ports(self):
