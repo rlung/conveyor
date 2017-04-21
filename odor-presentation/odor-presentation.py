@@ -166,6 +166,7 @@ class InputManager(tk.Frame):
         self.frame_cam = tk.LabelFrame(hardware_frame, text="Camera")
         self.frame_cam.grid(row=0, column=1, padx=px, pady=py, sticky=tk.W+tk.E)
 
+        self.var_cam_state = tk.BooleanVar()
         self.var_fps = tk.IntVar()
         self.var_vsub = tk.IntVar()
         self.var_hsub = tk.IntVar()
@@ -356,13 +357,14 @@ class InputManager(tk.Frame):
         instr = [x for x in instrs if x.name == self.var_instr.get()]
         if instr:
             self.cam = instrument(instr[0])
+            self.var_cam_state.set(True)
             # self.cam.start_live
         else:
             return 1
 
     def cam_close(self):
-        # self.cam.close()
-        pass
+        self.cam.close()
+        self.var_cam_state.set(True)
 
     def cam_settings(self):
         self.window_settings = tk.Toplevel(self)
@@ -412,6 +414,9 @@ class InputManager(tk.Frame):
         # self.wait_window(self.window_cam)
 
     def cam_preview(self):
+        if not self.var_cam_state.get():
+            self.cam_start()
+
         start_time = time.clock()
         frame_dur = 1000. / self.var_fps.get()
 
@@ -423,10 +428,10 @@ class InputManager(tk.Frame):
             exposure_time='{}ms'.format(exposure_time))
         too_fast = True if time.clock() - start_time > frame_dur / 1000. else False
         self.im.set_data(im)
-        self.ax.set_ylim(0, self.cam.height)
-        self.ax.set_xlim(0, self.cam.width)
-        self.ax.draw_artist(self.im)
-        self.fig.canvas.blit(self.ax.bbox)
+        # self.ax_preview.set_ylim(0, self.cam.height)
+        # self.ax_preview.set_xlim(0, self.cam.width)
+        self.ax_preview.draw_artist(self.im)
+        self.fig_preview.canvas.blit(self.ax_preview.bbox)
 
         # time_left = frame_dur / 1000. - (time.clock() - start_time)
         # print time_left
@@ -440,7 +445,7 @@ class InputManager(tk.Frame):
         #         self.entry_status.insert(0, "Recording too fast")
         #     self.parent.after(0, self.refresh_preview)
 
-        self.parent.after(200, self.cam_preview)
+        self.parent.after(20, self.cam_preview)
 
 
     def update_ports(self):
@@ -534,8 +539,8 @@ class InputManager(tk.Frame):
 
         # Define parameters
         # NOTE: Order is important here since this order is preserved when sending via serial.
+        self.parameters['session_duration'] = int(self.entry_trial_dur.get())
         self.parameters['trial_duration'] = int(self.entry_trial_dur.get())
-        self.parameters['conveyor_away'] = int(self.conveyor_away_var.get())
         self.parameters['track_period'] = int(self.entry_track_period.get())
 
         # Clear old data
