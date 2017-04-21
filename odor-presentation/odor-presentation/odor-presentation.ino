@@ -11,8 +11,9 @@ GUI for recording and calculations.
 
 
 #define IMGPINDUR 100
-#define ENDCODE 48
+#define CODEEND 48
 #define STARTCODE 69
+#define CODETRIAL 70
 #define DELIM ","         // Delimiter used for serial outputs
 #define STEPSHIFT 1       // Scale factor to convert tracking to stepper
 #define STEPCODE 53
@@ -73,8 +74,8 @@ void getParams() {
   for (int p = 0; p < paramNum; p++) {
     parameters[p] = Serial.parseInt();
   }
-  trialDur     = parameters[0];
-  conveyorAway = parameters[1];
+  sessionDur   = parameters[0];
+  trialDur     = parameters[1];
   trackPeriod  = parameters[2];
 }
 
@@ -85,7 +86,7 @@ void waitForStart() {
   while (1) {
     reading = Serial.read();
     switch(reading) {
-      case ENDCODE:
+      case CODEEND:
         endSession(0);
       case STARTCODE:
         return;   // Start session
@@ -151,9 +152,12 @@ void loop() {
     // Watch for information from computer.
     byte reading = Serial.read();
     switch(reading) {
-      case ENDCODE:
+      case CODEEND:
         endSession(ts);
         break;
+      case CODETRIAL:
+        trialState = true;
+        move2mouse = true;
     }
   }
 
@@ -169,49 +173,23 @@ void loop() {
     }
   }
   
-  // -- 1. SESSION TIMING -- //
-  static boolean running;
-  static boolean finishup;
-  static unsigned long tsTrial;
+  // -- 1. SESSION CONTROL -- //
+  static boolean trialState;
+  static boolean move2mouse;
+  static boolean actualTrial;
+  static boolean move2start;
   static unsigned long trialStart;
 
-  if (conveyorSet) {
-    if (! running) {
-      running = true;
-      digitalWrite(imgStartPin, HIGH);
-      trialStart = ts;
 
-      Serial.print(code_trial_start);
-      Serial.print(DELIM);
-      Serial.println(ts);
-    }
-
-    tsTrial = ts - trialStart;
-    if (tsTrial >= trialDur) finishup = true;
-  }
-
-  // -- 2. SET CONVEYER -- //
-  // Move conveyor into position (if not already set)
-  if (! conveyorSet) {
-
-    // Move conveyor away from subject
-    if (conveyorAway) {
-      if (digitalRead(railStartPin)) {
-        conveyorSet = true;
-      }
-      else {
-        if (ts >= nextTrackTS) {
-          Serial1.write((byte)STEPCODE);
-          Serial1.write((byte)0);
-          Serial1.write((byte)0);
-        }
-      }
-    }
+  // Start trial
+  if (trialState) {
 
     // Move conveyor toward subject
-    else {
+    if  (move2mouse) {
       if (digitalRead(railStopPin)) {
-        conveyorSet = true;
+        move2mouse = false;
+        actualTrial = true;
+        trialStart = ts;
       }
       else {
         if (ts >= nextTrackTS) {
@@ -222,9 +200,37 @@ void loop() {
       }
     }
 
+    // Actual trial
+    else if (actualTrial) {
+      if (ts - trialStart >= trialDur) {
+        actualTrial = false;
+        move2start = true;
+      }
+    }
+
+    // Move conveyor back to start
+    else if (move2start) {
+      if (digitalRead(railStartPin)) {
+        move2start = false;
+        trialState = false;
+      }
+      else {
+        if (ts >= nextTrackTS) {
+          Serial1.write((byte)STEPCODE);
+          Serial1.write((byte)0);
+          Serial1.write((byte)0);
+        }
+      }
+    }
   }
 
-  // -- 3. TRACK MOVEMENT -- //
+  // End session
+  else if (ts >= sessionDur) {
+    endSession(ts);
+  }
+
+
+  // -- 2. TRACK MOVEMENT -- //
 
   if (ts >= nextTrackTS) {
     int trackOutVal = trackChange;
@@ -241,8 +247,3 @@ void loop() {
     // Increment nextTractTS for next track stamp
     nextTrackTS = nextTrackTS + trackPeriod;
   }
-
- // -- 4. END SESSION -- //
- if (finishup) endSession(ts);
-}
-
