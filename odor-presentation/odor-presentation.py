@@ -11,6 +11,7 @@ imaging. Script interfaces with Arduino microcontroller and imaging devices.
 import Tkinter as tk
 import tkMessageBox
 import tkFileDialog
+from ScrolledText import ScrolledText
 import collections
 import serial
 import serial.tools.list_ports
@@ -36,8 +37,8 @@ import pdb
 
 
 # Setup Slack
-# Token is stored in text file 'key_file'
-key_file = 'slack.txt'
+# Token is stored in text file defined by 'key_file'
+key_file = os.path.join(os.path.expanduser('~'), '.slack')
 if os.path.isfile(key_file):
     with open(key_file, 'r') as kf:
         slack = Slacker(kf.read())
@@ -57,16 +58,16 @@ class InputManager(tk.Frame):
 
         # GUI layout
         # parent
-        # - parameter_frame
+        # - frame_parameter
         #   + session_frame
-        #     ~ core_session_frame
-        #       - session_prop_frame
-        #       - track_frame
-        #     ~ opt_session_frame
-        #       - conveyor_frame
-        #       - debug_frame
+        #     ~ session_prop_frame
+        #     ~ track_frame
+        #   + hardware_frame
+        #     ~ frame_preview
+        #     ~ frame_cam
+        #     ~ serial_frame
+        #     ~ debug_frame
         #   + start_frame
-        #   + serial_frame
         #   + slack_frame
         # - monitor_frame
         #   + (figure)
@@ -85,46 +86,85 @@ class InputManager(tk.Frame):
         ###########################
         ##### PARAMETER FRAME #####
         ###########################
-        parameter_frame = tk.Frame(parent)
-        parameter_frame.grid(row=0, column=0)
+        frame_parameter = tk.Frame(parent)
+        frame_parameter.grid(row=0, column=0)
 
-        ###### SESSION SETTINGS FRAME ######
-        session_frame = tk.Frame(parameter_frame)
-        session_frame.grid(row=0, column=0, rowspan=2, padx=15, pady=5)
+        # Session parameters frame
+        session_frame = tk.Frame(frame_parameter)
+        session_frame.grid(row=0, column=2, padx=15, pady=5)
 
-        core_session_frame = tk.Frame(session_frame)
-        core_session_frame.grid(row=0, column=0)
-
-        # Session frame
-        session_prop_frame = tk.Frame(core_session_frame)
+        ## UI for trial control
+        session_prop_frame = tk.Frame(session_frame)
         session_prop_frame.grid(row=0, column=0, sticky=tk.E, padx=15, pady=5)
-        self.entry_trial_dur = tk.Entry(session_prop_frame, width=entry_width)
-        tk.Label(session_prop_frame, text="Trial duration: ", anchor=tk.E).grid(row=0, column=0, sticky=tk.E)
-        self.entry_trial_dur.grid(row=0, column=1, sticky=tk.W)
 
-        # Track frame
-        track_frame = tk.Frame(core_session_frame)
-        track_frame.grid(row=2, column=0, sticky=tk.E, padx=15, pady=5)
+        self.entry_session_dur = tk.Entry(session_prop_frame, width=entry_width)
+        self.entry_trial_dur = tk.Entry(session_prop_frame, width=entry_width)
+        tk.Label(session_prop_frame, text="Session duration: ", anchor=tk.E).grid(row=0, column=0, sticky=tk.E)
+        tk.Label(session_prop_frame, text="Trial duration: ", anchor=tk.E).grid(row=1, column=0, sticky=tk.E)
+        self.entry_session_dur.grid(row=0, column=1, sticky=tk.W)
+        self.entry_trial_dur.grid(row=1, column=1, sticky=tk.W)
+
+        ## UI for tracking
+        track_frame = tk.Frame(session_frame)
+        track_frame.grid(row=1, column=0, sticky=tk.E, padx=15, pady=5)
         self.entry_track_period = tk.Entry(track_frame, width=entry_width)
         tk.Label(track_frame, text="Track period (ms): ", anchor=tk.E).grid(row=0, column=0, sticky=tk.E)
         self.entry_track_period.grid(row=0, column=1, sticky=tk.W)
+
+        ## Misc
+        frame_misc = tk.Frame(session_frame)
+        frame_misc.grid(row=2, column=0, padx=5, pady=5, sticky=tk.N+tk.S+tk.W+tk.E)
+
+        frame_notes = tk.Frame(frame_misc)
+        frame_notes.grid(sticky=tk.N+tk.S+tk.W+tk.E, padx=15, pady=5)
+        tk.Label(frame_notes, text="Notes:").grid(row=0, column=0, sticky=tk.W)
+        self.scrolled_notes = ScrolledText(frame_notes, width=20, height=15)
+        self.scrolled_notes.grid(row=1, column=0, sticky=tk.N+tk.S+tk.W+tk.E)
+
+        frame_slack = tk.Frame(frame_misc)
+        frame_slack.grid(row=1, sticky=tk.W+tk.E, padx=15, pady=5)
+        tk.Label(frame_slack, text="Slack address: ", anchor=tk.W).grid(row=0, column=0, sticky=tk.W+tk.E)
+        self.entry_slack = tk.Entry(frame_slack)
+        self.entry_slack.grid(row=1, column=0, sticky=tk.N+tk.S+tk.W+tk.E)
+        self.button_slack = tk.Button(frame_slack, text="", command=lambda: slack_msg(self.entry_slack.get(), "Test", test=True))
+        self.button_slack.grid(row=1, column=1, padx=5, sticky=tk.W)
         
-        # Options frame
-        opt_session_frame = tk.Frame(session_frame)
-        opt_session_frame.grid(row=0, column=1)
+        # # Options frame
+        # opt_session_frame = tk.Frame(frame_parameter)
+        # opt_session_frame.grid(row=0, column=0)
 
-        conveyor_frame = tk.LabelFrame(opt_session_frame, text="Conveyor")
-        conveyor_frame.grid(row=0, column=0, padx=10, pady=5, sticky=tk.W+tk.E)
-        self.conveyor_away_var = tk.BooleanVar()
-        self.check_conveyor_away = tk.Checkbutton(
-            conveyor_frame,
-            text="Set conveyor away",
-            variable=self.conveyor_away_var)
-        self.check_conveyor_away.grid(row=0, column=0)
+        # conveyor_frame = tk.LabelFrame(opt_session_frame, text="Conveyor")
+        # conveyor_frame.grid(row=0, column=0, padx=10, pady=5, sticky=tk.W+tk.E)
+        # self.conveyor_away_var = tk.BooleanVar()
+        # self.check_conveyor_away = tk.Checkbutton(
+        #     conveyor_frame,
+        #     text="Set conveyor away",
+        #     variable=self.conveyor_away_var)
+        # self.check_conveyor_away.grid(row=0, column=0)
 
-        # UI for camera
-        self.frame_cam = tk.LabelFrame(opt_session_frame, text="Camera")
-        self.frame_cam.grid(row=1, column=0, padx=px, pady=py, sticky=tk.W+tk.E)
+        # Hardware parameters
+        hardware_frame = tk.Frame(frame_parameter)
+        hardware_frame.grid(row=0, column=1)
+
+        ## Camera preview
+        self.frame_preview = tk.Frame(hardware_frame)
+        self.frame_preview.grid(row=0, column=0, rowspan=3, sticky=tk.W+tk.E+tk.N+tk.S)
+
+        self.fig_preview, self.ax_preview = plt.subplots(figsize=(1280./1024 * 3.0, 3.0))
+        self.fig_preview.subplots_adjust(left=0, bottom=0, right=1, top=1, wspace=0, hspace=0)
+        self.im = self.ax_preview.imshow(np.zeros((1024, 1280)), vmin=1, vmax=254, cmap='gray', interpolation='none')
+        self.im.cmap.set_under('b')
+        self.im.cmap.set_over('r')
+        self.ax_preview.axis('image')
+        self.ax_preview.axis('off')
+        self.canvas_preview = FigureCanvasTkAgg(self.fig_preview, self.frame_preview)
+        self.canvas_preview.show()
+        self.canvas_preview.draw()
+        self.canvas_preview.get_tk_widget().grid(row=0, column=0, sticky=tk.W+tk.E+tk.N+tk.S)
+
+        ## UI for camera
+        self.frame_cam = tk.LabelFrame(hardware_frame, text="Camera")
+        self.frame_cam.grid(row=0, column=1, padx=px, pady=py, sticky=tk.W+tk.E)
 
         self.var_fps = tk.IntVar()
         self.var_vsub = tk.IntVar()
@@ -139,23 +179,20 @@ class InputManager(tk.Frame):
             text="Update", command=self.update_instruments)
         self.button_preview = tk.Button(self.frame_cam,
             text="Preview", command=self.cam_preview)
+        self.button_settings = tk.Button(self.frame_cam,
+            text="Settings", command=self.cam_settings)
         self.option_instr.grid(row=1, column=0, columnspan=2, padx=px1, pady=py1, sticky=tk.W)
         self.button_refresh_instr.grid(row=2, column=0, padx=px1, pady=py1, sticky=tk.W)
         self.button_preview.grid(row=2, column=1, padx=px1, pady=py1, sticky=tk.W)
+        self.button_settings.grid(row=2, column=2, padx=px1, pady=py1, sticky=tk.W)
         self.instrument_panels = [
             self.option_instr,
             self.button_refresh_instr,
         ]
 
-        debug_frame = tk.LabelFrame(opt_session_frame, text="Debugging")
-        debug_frame.grid(row=2, column=0, padx=10, pady=5, sticky=tk.W+tk.E)
-        self.print_var = tk.BooleanVar()
-        self.check_print = tk.Checkbutton(debug_frame, text="Print Arduino output", variable=self.print_var)
-        self.check_print.grid(row=0, column=0)
-
-        ###### SERIAL FRAME ######
-        serial_frame = tk.Frame(parameter_frame)
-        serial_frame.grid(row=0, column=1, padx=5, pady=5, sticky=tk.W+tk.E)
+        ## UI for Arduino
+        serial_frame = tk.LabelFrame(hardware_frame, text="Arduino")
+        serial_frame.grid(row=1, column=1, padx=5, pady=5, sticky=tk.W+tk.E)
         self.ser = None
         self.port_var = tk.StringVar()
 
@@ -180,17 +217,15 @@ class InputManager(tk.Frame):
         self.button_close_port.grid(row=0, column=1, padx=10, pady=5)
         self.button_update_ports.grid(row=0, column=2, pady=5)
 
-        ###### SLACK FRAME #####
-        slack_frame = tk.Frame(parameter_frame)
-        slack_frame.grid(row=1, column=1, padx=5, pady=5, sticky=tk.W+tk.E)
-        tk.Label(slack_frame, text="Slack address for notifications: ", anchor=tk.W).grid(row=0, column=0, sticky=tk.W+tk.E)
-        self.entry_slack = tk.Entry(slack_frame)
-        self.entry_slack.grid(row=1, column=0, sticky=tk.N+tk.S+tk.W+tk.E)
-        self.button_slack = tk.Button(slack_frame, text="Test", command=lambda: slack_msg(self.entry_slack.get(), "Test", test=True))
-        self.button_slack.grid(row=1, column=1, padx=5, sticky=tk.W)
+        ## UI for debug options
+        debug_frame = tk.LabelFrame(hardware_frame, text="Debugging")
+        debug_frame.grid(row=2, column=1, padx=10, pady=5, sticky=tk.W+tk.E)
+        self.print_var = tk.BooleanVar()
+        self.check_print = tk.Checkbutton(debug_frame, text="Print Arduino output", variable=self.print_var)
+        self.check_print.grid(row=0, column=0)
 
-        ##### START FRAME #####
-        start_frame = tk.Frame(parameter_frame)
+        # Start frame
+        start_frame = tk.Frame(frame_parameter)
         start_frame.grid(row=3, column=0, columnspan=2, padx=5, pady=15, sticky=tk.W+tk.E)
         start_frame.columnconfigure(0, weight=4)
 
@@ -254,9 +289,9 @@ class InputManager(tk.Frame):
             self.option_ports,
             self.button_update_ports,
             self.button_open_port,
+            self.entry_session_dur,
             self.entry_trial_dur,
             self.entry_track_period,
-            self.check_conveyor_away,
             self.check_print
         ]
         # Boolean of objects in list above that should be enabled when time...
@@ -282,8 +317,8 @@ class InputManager(tk.Frame):
         self.update_instruments()
 
         # Default values
-        self.entry_trial_dur.insert(0, 60000)
-        self.conveyor_away_var.set(True)
+        self.entry_session_dur.insert(0, 60000)
+        self.entry_trial_dur.insert(0, 5000)
         self.entry_track_period.insert(0, 50)
         self.print_var.set(True)
         self.button_close_port['state'] = 'disabled'
@@ -329,27 +364,12 @@ class InputManager(tk.Frame):
         # self.cam.close()
         pass
 
-    def cam_preview(self):
-        self.window_cam = tk.Toplevel(self)
-        self.window_cam.wm_title("Camera preview")
+    def cam_settings(self):
+        self.window_settings = tk.Toplevel(self)
+        self.window_settings.wm_title("Camera settings")
 
-        self.cam_start()
-        
-        frame_preview = tk.Frame(self.window_cam)
-        frame_preview.grid(row=0)
-        self.fig, self.ax = plt.subplots(figsize=(1280./1024 * 4.8, 4.8))
-        self.fig.subplots_adjust(left=0, bottom=0, right=1, top=1, wspace=0, hspace=0)
-        self.im = self.ax.imshow(np.zeros((1024, 1280)), vmin=1, vmax=254, cmap='gray', interpolation='none')
-        self.im.cmap.set_under('b')
-        self.im.cmap.set_over('r')
-        self.ax.axis('image')
-        self.ax.axis('off')
-        self.canvas = FigureCanvasTkAgg(self.fig, frame_preview)
-        self.canvas.show()
-        self.canvas.get_tk_widget().grid(row=0, column=0, sticky=tk.W+tk.E+tk.N+tk.S)
-
-        frame_settings = tk.Frame(self.window_cam)
-        frame_settings.grid(row=1)
+        frame_settings = tk.Frame(self.window_settings)
+        frame_settings.grid()
         tk.Label(frame_settings, text="FPS: ", anchor=tk.E).grid(row=1, column=0, sticky=tk.E)
         tk.Label(frame_settings, text="Vertical subsampling: ", anchor=tk.E).grid(row=2, column=0, sticky=tk.E)
         tk.Label(frame_settings, text="Horizontal subsampling: ", anchor=tk.E).grid(row=3, column=0, sticky=tk.E)
@@ -363,7 +383,7 @@ class InputManager(tk.Frame):
             command=self.var_hsub.set)
         scale_gain = tk.Scale(frame_settings, orient='horizontal', from_=0, to=100,
             command=self.var_gain.set)
-        scale_expo = tk.Scale(frame_settings, orient='horizontal', from_=0, to=100,
+        scale_expo = tk.Scale(frame_settings, orient='horizontal', from_=1, to=100,
             command=self.var_expo.set)
         scale_fps.set(self.var_fps.get())
         scale_vsub.set(self.var_vsub.get())
@@ -376,29 +396,24 @@ class InputManager(tk.Frame):
         scale_gain.grid(row=4, column=1, sticky=tk.W+tk.E)
         scale_expo.grid(row=5, column=1, sticky=tk.W+tk.E)
 
-        frame_status = tk.Frame(self.window_cam)
-        frame_status.grid(row=2)
-        self.entry_status = tk.Entry(frame_status, foreground='red')
-        self.entry_status.grid()
+        # frame_status = tk.Frame(self.window_cam)
+        # frame_status.grid(row=2)
+        # self.entry_status = tk.Entry(frame_status, foreground='red')
+        # self.entry_status.grid()
 
-        self.refresh_preview()
+        # def close_protocol():
+        #     self.cam_close()
+        #     self.window_cam.destroy()
+        #     self.window_cam = None
 
-        def close_protocol():
-            self.cam_close()
-            self.window_cam.destroy()
-            self.window_cam = None
+        # self.window_cam.protocol('WM_DELETE_WINDOW', close_protocol)
+        # self.window_cam.transient(self)
+        # self.window_cam.grab_set()
+        # self.wait_window(self.window_cam)
 
-        self.window_cam.protocol('WM_DELETE_WINDOW', close_protocol)
-        self.window_cam.transient(self)
-        self.window_cam.grab_set()
-        self.wait_window(self.window_cam)
-
-    def refresh_preview(self):
+    def cam_preview(self):
         start_time = time.clock()
         frame_dur = 1000. / self.var_fps.get()
-
-        if not self.window_cam:
-            return
 
         exposure_time = frame_dur * self.var_expo.get()/100.
         im = self.cam.grab_image(
@@ -410,7 +425,8 @@ class InputManager(tk.Frame):
         self.im.set_data(im)
         self.ax.set_ylim(0, self.cam.height)
         self.ax.set_xlim(0, self.cam.width)
-        self.fig.canvas.draw_idle()
+        self.ax.draw_artist(self.im)
+        self.fig.canvas.blit(self.ax.bbox)
 
         # time_left = frame_dur / 1000. - (time.clock() - start_time)
         # print time_left
@@ -424,7 +440,7 @@ class InputManager(tk.Frame):
         #         self.entry_status.insert(0, "Recording too fast")
         #     self.parent.after(0, self.refresh_preview)
 
-        self.parent.after(200, self.refresh_preview)
+        self.parent.after(200, self.cam_preview)
 
 
     def update_ports(self):
@@ -690,7 +706,7 @@ class InputManager(tk.Frame):
 
 def slack_msg(slack_recipient, msg, test=False):
     # Creates Slack message to slack_recipient from Bot. Message is string msg.
-    bot_username = "Social conveyer bot"
+    bot_username = "Odor conveyor bot"
     bot_icon = ":squirrel:"
 
     # Verify Slack recipient
