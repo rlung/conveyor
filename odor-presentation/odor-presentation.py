@@ -549,9 +549,12 @@ class InputManager(tk.Frame):
         self.plot_canvas.draw()
         for obj in self.scoreboard_objs:
             obj.delete(0, tk.END)
-        
+
         # Initialize/clear old data
         self.trial_onset = np.zeros(1000, dtype='uint32')
+        self.trial_manual = np.zeros(1000, dtype=bool)
+        self.rail_leave = np.zeros(1000, dtype='uint32')
+        self.rail_home = np.zeros(1000, dtype='uint32')
         self.steps = np.zeros((2, 360000), dtype='uint32')
         self.track = np.zeros((2, 360000), dtype='int32')
         self.counter = {
@@ -629,7 +632,11 @@ class InputManager(tk.Frame):
 
         # Codes
         code_end = 0
+        code_steps = 1
         code_trial_start = 3
+        code_trial_man = 4
+        code_rail_leave = 5
+        code_rail_home = 6
         code_track = 7
 
         # End on "Stop" button (by user)
@@ -652,6 +659,16 @@ class InputManager(tk.Frame):
 
             elif code == code_trial_start:
                 self.trial_onset[self.counter['trial']] = ts
+                # self.counter['trial'] += 1
+
+                manual = bool(q_in[2])
+                self.trial_manual[self.counter['trial']] = manual
+
+            elif code == code_rail_leave:
+                self.rail_leave[self.counter['trial']] = ts
+
+            elif code == code_rail_home:
+                self.rail_home[self.counter['trial']] = ts
                 self.counter['trial'] += 1
 
             elif code == code_track:
@@ -666,6 +683,7 @@ class InputManager(tk.Frame):
                     np.append(X, ts),
                     np.append(Y, dist)
                 ])
+                
                 
                 # Increment counter
                 self.counter['track'] += 1
@@ -686,8 +704,12 @@ class InputManager(tk.Frame):
 
         if data_file:
             behav_grp = data_file.create_group('behavior')
-            behav_grp.create_dataset(name='trials', data=self.trial_onset[:self.counter['trial']], dtype='uint32')
-            behav_grp.create_dataset(name='track', data=self.track[:, :self.counter['track']], dtype='int32')
+            behav_grp.create_dataset(name='trials', data=self.trial_onset[:self.counter['trial']])
+            behav_grp.create_dataset(name='trials', data=self.trial_manual[:self.counter['trial']])
+            behav_grp.create_dataset(name='trials', data=self.rail_leave[:self.counter['trial']])
+            behav_grp.create_dataset(name='trials', data=self.rail_home[:self.counter['trial']])
+            behav_grp.create_dataset(name='track', data=self.steps[:, :self.counter['step']])
+            behav_grp.create_dataset(name='track', data=self.track[:, :self.counter['track']])
             
             # Store session parameters into behavior group
             behav_grp.attrs['start_time'] = self.start_time

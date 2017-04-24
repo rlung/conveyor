@@ -26,17 +26,23 @@ const int trackPinB   = 3;
 const int imgStartPin = 6;
 const int imgStopPin  = 7;
 const int railStartPin = 9;
-const int railStopPin = 10;
+const int railEndPin = 10;
+
+//int railStart = true;
+//int railEnd = false;
 
 // Output codes
 const int code_end = 0;
 const int code_conveyer_steps = 1;
 const int code_trial_start = 3;
+// const int code_trial_man = 4;
+const int code_rail_leave = 5;
+const int code_rail_home = 6;
 const int code_track = 7;
 
 // Variables via serial
+unsigned long sessionDur;
 unsigned long trialDur;
-boolean conveyorAway;
 unsigned int trackPeriod;
 
 // Other variables
@@ -104,7 +110,7 @@ void setup() {
   pinMode(imgStartPin, OUTPUT);
   pinMode(imgStopPin, OUTPUT);
   pinMode(railStartPin, INPUT);
-  pinMode(railStopPin, INPUT);
+  pinMode(railEndPin, INPUT);
   pinMode(trackPinA, INPUT);
   pinMode(trackPinB, INPUT);
 
@@ -135,6 +141,13 @@ void loop() {
   static boolean conveyorSet;
   static unsigned long nextTrackTS = trackPeriod;  // Timer used for motion tracking and conveyor movement
 
+  static boolean manual:       // indicates if trial was started manually
+  static boolean trialState;
+  static boolean move2mouse;
+  static boolean actualTrial;
+  static boolean move2start;
+  static unsigned long trialStart;
+
   // Timestamp
   static const unsigned long start = millis();  // record start of session
   unsigned long ts = millis() - start;          // current timestamp
@@ -158,6 +171,22 @@ void loop() {
       case CODETRIAL:
         trialState = true;
         move2mouse = true;
+        manual = true;
+        // Serial.print(code_trial_man);
+        // Serial.print(DELIM);
+        // Serial.println(ts);
+        break;
+//      case 56:
+//        railStart = false;
+//        railEnd = true;
+//        Serial.println("At mouse");
+//        break;
+//      case 57:
+//        railStart = true;
+//        railEnd = false;
+//        Serial.println("At home");
+//        break;
+      break;
     }
   }
 
@@ -174,22 +203,23 @@ void loop() {
   }
   
   // -- 1. SESSION CONTROL -- //
-  static boolean trialState;
-  static boolean move2mouse;
-  static boolean actualTrial;
-  static boolean move2start;
-  static unsigned long trialStart;
-
 
   // Start trial
   if (trialState) {
 
     // Move conveyor toward subject
     if  (move2mouse) {
-      if (digitalRead(railStopPin)) {
+//      if (railEnd) {
+      if (digitalRead(railEndPin)) {
         move2mouse = false;
         actualTrial = true;
         trialStart = ts;
+
+        Serial.print(code_trial_start);
+        Serial.print(DELIM);
+        Serial.print(ts);
+        Serial.print(DELIM);
+        Serial.println(manual);
       }
       else {
         if (ts >= nextTrackTS) {
@@ -202,17 +232,25 @@ void loop() {
 
     // Actual trial
     else if (actualTrial) {
+      // End trial
       if (ts - trialStart >= trialDur) {
         actualTrial = false;
         move2start = true;
+        Serial.println("Trial over");
       }
     }
 
     // Move conveyor back to start
     else if (move2start) {
+//      if (railStart) {
       if (digitalRead(railStartPin)) {
         move2start = false;
         trialState = false;
+        manual = false;
+
+        Serial.print(code_rail_home);
+        Serial.print(DELIM);
+        Serial.println(ts);
       }
       else {
         if (ts >= nextTrackTS) {
@@ -247,3 +285,4 @@ void loop() {
     // Increment nextTractTS for next track stamp
     nextTrackTS = nextTrackTS + trackPeriod;
   }
+}
