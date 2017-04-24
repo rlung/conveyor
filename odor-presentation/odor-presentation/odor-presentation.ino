@@ -16,7 +16,8 @@ GUI for recording and calculations.
 #define CODETRIAL 70
 #define DELIM ","         // Delimiter used for serial outputs
 #define STEPSHIFT 1       // Scale factor to convert tracking to stepper
-#define STEPCODE 53
+#define CODEFORWARD 53
+#define CODEBACKWARD 54
 #define STEPMAX 127       // Maximum number of steps by stepper
 
 
@@ -44,6 +45,7 @@ const int code_track = 7;
 unsigned long sessionDur;
 unsigned long trialDur;
 unsigned int trackPeriod;
+unsigned int trackSteps;
 
 // Other variables
 volatile int trackChange = 0;   // Rotations within tracking epochs
@@ -74,7 +76,7 @@ void endSession(unsigned long ts) {
 
 // Retrieve parameters from serial
 void getParams() {
-  const int paramNum = 3;
+  const int paramNum = 4;
   unsigned long parameters[paramNum];
 
   for (int p = 0; p < paramNum; p++) {
@@ -83,6 +85,7 @@ void getParams() {
   sessionDur   = parameters[0];
   trialDur     = parameters[1];
   trackPeriod  = parameters[2];
+  trackSteps   = parameters[3];
 }
 
 
@@ -141,7 +144,7 @@ void loop() {
   static boolean conveyorSet;
   static unsigned long nextTrackTS = trackPeriod;  // Timer used for motion tracking and conveyor movement
 
-  static boolean manual:       // indicates if trial was started manually
+  static boolean manual;       // indicates if trial was started manually
   static boolean trialState;
   static boolean move2mouse;
   static boolean actualTrial;
@@ -169,12 +172,16 @@ void loop() {
         endSession(ts);
         break;
       case CODETRIAL:
-        trialState = true;
-        move2mouse = true;
-        manual = true;
-        // Serial.print(code_trial_man);
-        // Serial.print(DELIM);
-        // Serial.println(ts);
+        // Only works if not already in trial
+        if (! trialState) {
+          trialState = true;
+          move2mouse = true;
+          manual = true;
+
+          Serial.print(code_rail_leave);
+          Serial.print(DELIM);
+          Serial.println(ts);
+        }
         break;
 //      case 56:
 //        railStart = false;
@@ -193,12 +200,20 @@ void loop() {
   // Read from conveyor Arduino
   if (Serial1.available() > 1) {
     // Transmit step data from Arduino slave to computer.
-    if (Serial1.read() == STEPCODE) {  // Throw out first byte
+    byte code = Serial1.read();
+    if (code == CODEFORWARD) {  // Throw out first byte
       Serial.print(code_conveyer_steps);
       Serial.print(DELIM);
       Serial.print(ts);
       Serial.print(DELIM);
       Serial.println(Serial1.read());
+    }
+    else if (code == CODEBACKWARD) {  // Throw out first byte
+      Serial.print(code_conveyer_steps);
+      Serial.print(DELIM);
+      Serial.print(ts);
+      Serial.print(DELIM);
+      Serial.println(-int(Serial1.read()));
     }
   }
   
@@ -223,9 +238,9 @@ void loop() {
       }
       else {
         if (ts >= nextTrackTS) {
-          Serial1.write((byte)STEPCODE);
-          Serial1.write((byte)50);
-          Serial1.write((byte)25);  // This value doesn't really matter
+          Serial1.write((byte)CODEFORWARD);
+          Serial1.write((byte)trackPeriod);
+          Serial1.write((byte)trackSteps);
         }
       }
     }
@@ -254,9 +269,9 @@ void loop() {
       }
       else {
         if (ts >= nextTrackTS) {
-          Serial1.write((byte)STEPCODE);
-          Serial1.write((byte)0);
-          Serial1.write((byte)0);
+          Serial1.write((byte)CODEBACKWARD);
+          Serial1.write((byte)trackPeriod);
+          Serial1.write((byte)trackSteps);
         }
       }
     }

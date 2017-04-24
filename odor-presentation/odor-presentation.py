@@ -45,6 +45,7 @@ if os.path.isfile(key_file):
 else:
     slack = None
 
+history = 10000
 subsamp = {1: 1,
            2: 2,
            3: 4,
@@ -108,8 +109,11 @@ class InputManager(tk.Frame):
         track_frame = tk.Frame(session_frame)
         track_frame.grid(row=1, column=0, sticky=tk.E, padx=15, pady=5)
         self.entry_track_period = tk.Entry(track_frame, width=entry_width)
+        self.entry_track_steps = tk.Entry(track_frame, width=entry_width)
         tk.Label(track_frame, text="Track period (ms): ", anchor=tk.E).grid(row=0, column=0, sticky=tk.E)
+        tk.Label(track_frame, text="Track steps: ", anchor=tk.E).grid(row=1, column=0, sticky=tk.E)
         self.entry_track_period.grid(row=0, column=1, sticky=tk.W)
+        self.entry_track_steps.grid(row=1, column=1, sticky=tk.W)
 
         ## Misc
         frame_misc = tk.Frame(session_frame)
@@ -256,10 +260,10 @@ class InputManager(tk.Frame):
         sns.set_style('dark')
         self.color_vel = 'darkslategray'
 
-        self.fig, self.ax = plt.subplots(figsize=(8, 3))
+        self.fig, self.ax = plt.subplots(figsize=(8, 2))
         self.ax.set_xlabel("Trial time (ms)")
         self.ax.set_ylabel("Relative velocity")
-        self.ax.set_xlim(0, 60000)
+        self.ax.set_xlim(-history, 0)
         self.ax.set_ylim(-50, 50)
         self.vel_trace, = self.ax.plot([], [], c=self.color_vel)
         self.ax.axhline(y=0, linestyle='--', linewidth=1, color='0.5')
@@ -272,12 +276,16 @@ class InputManager(tk.Frame):
         ##### SCOREBOARD #####
         scoreboard_frame = tk.Frame(monitor_frame, bg='white')
         scoreboard_frame.grid(row=0, column=1, padx=20, sticky=tk.N)
+
+        self.manual = tk.BooleanVar()
         self.entry_start = tk.Entry(scoreboard_frame, width=entry_width)
         self.entry_end = tk.Entry(scoreboard_frame, width=entry_width)
+        self.button_manual = tk.Button(scoreboard_frame, command=lambda: self.manual.set(True))
         tk.Label(scoreboard_frame, text="Session start:", bg='white', anchor=tk.W).grid(row=0, sticky=tk.W)
         tk.Label(scoreboard_frame, text="Session end:", bg='white', anchor=tk.W).grid(row=2, sticky=tk.W)
         self.entry_start.grid(row=1, sticky=tk.W)
         self.entry_end.grid(row=3, sticky=tk.W)
+        self.button_manual.grid(row=4, sticky=tk.W+tk.E)
 
         self.scoreboard_objs = [
             self.entry_start,
@@ -293,6 +301,7 @@ class InputManager(tk.Frame):
             self.entry_session_dur,
             self.entry_trial_dur,
             self.entry_track_period,
+            self.entry_track_steps,
             self.check_print
         ]
         # Boolean of objects in list above that should be enabled when time...
@@ -321,6 +330,7 @@ class InputManager(tk.Frame):
         self.entry_session_dur.insert(0, 60000)
         self.entry_trial_dur.insert(0, 5000)
         self.entry_track_period.insert(0, 50)
+        self.entry_track_steps.insert(0, 5)
         self.print_var.set(True)
         self.button_close_port['state'] = 'disabled'
         # self.entry_slack.insert(0, "@randall")
@@ -539,13 +549,14 @@ class InputManager(tk.Frame):
 
         # Define parameters
         # NOTE: Order is important here since this order is preserved when sending via serial.
-        self.parameters['session_duration'] = int(self.entry_trial_dur.get())
+        self.parameters['session_duration'] = int(self.entry_session_dur.get())
         self.parameters['trial_duration'] = int(self.entry_trial_dur.get())
         self.parameters['track_period'] = int(self.entry_track_period.get())
+        self.parameters['track_steps'] = int(self.entry_track_steps.get())
 
         # Clear old data
         self.vel_trace.set_data([[], []])
-        self.ax.set_xlim(0, self.parameters['trial_duration'])
+        # self.ax.set_xlim(0, self.parameters['trial_duration'])
         self.plot_canvas.draw()
         for obj in self.scoreboard_objs:
             obj.delete(0, tk.END)
@@ -555,7 +566,7 @@ class InputManager(tk.Frame):
         self.trial_manual = np.zeros(1000, dtype=bool)
         self.rail_leave = np.zeros(1000, dtype='uint32')
         self.rail_home = np.zeros(1000, dtype='uint32')
-        self.steps = np.zeros((2, 360000), dtype='uint32')
+        self.steps = np.zeros((2, 360000), dtype='int32')
         self.track = np.zeros((2, 360000), dtype='int32')
         self.counter = {
             'trial': 0,
@@ -644,6 +655,10 @@ class InputManager(tk.Frame):
             self.stop.set(False)
             self.ser.write("0")
             print("Stopped by user.")
+        elif self.manual.get():
+            self.manual.set(False)
+            self.ser.write("F")
+            print("Manual trial triggered")
 
         # Incoming queue has format:
         #   [code, ts [, extra values...]]
@@ -671,6 +686,13 @@ class InputManager(tk.Frame):
                 self.rail_home[self.counter['trial']] = ts
                 self.counter['trial'] += 1
 
+            elif code == code_steps:
+                dist = int(q_in[2])
+
+                # Record tracking
+                self.steps[:, self.counter['steps']] = [ts, dist]
+                self.counter['steps'] += 1
+
             elif code == code_track:
                 dist = int(q_in[2])
 
@@ -683,6 +705,7 @@ class InputManager(tk.Frame):
                     np.append(X, ts),
                     np.append(Y, dist)
                 ])
+                self.ax.set_xlim(ts-history, ts)
                 
                 
                 # Increment counter
@@ -705,10 +728,10 @@ class InputManager(tk.Frame):
         if data_file:
             behav_grp = data_file.create_group('behavior')
             behav_grp.create_dataset(name='trials', data=self.trial_onset[:self.counter['trial']])
-            behav_grp.create_dataset(name='trials', data=self.trial_manual[:self.counter['trial']])
-            behav_grp.create_dataset(name='trials', data=self.rail_leave[:self.counter['trial']])
-            behav_grp.create_dataset(name='trials', data=self.rail_home[:self.counter['trial']])
-            behav_grp.create_dataset(name='track', data=self.steps[:, :self.counter['step']])
+            behav_grp.create_dataset(name='trial_type', data=self.trial_manual[:self.counter['trial']])
+            behav_grp.create_dataset(name='rail_leave', data=self.rail_leave[:self.counter['trial']])
+            behav_grp.create_dataset(name='rail_home', data=self.rail_home[:self.counter['trial']])
+            behav_grp.create_dataset(name='steps', data=self.steps[:, :self.counter['steps']])
             behav_grp.create_dataset(name='track', data=self.track[:, :self.counter['track']])
             
             # Store session parameters into behavior group
