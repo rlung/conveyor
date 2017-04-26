@@ -131,7 +131,6 @@ void setup() {
   // Set interrupt
   // Do not set earlier as track() will be called before session starts.
   attachInterrupt(digitalPinToInterrupt(trackPinA), track, RISING);
-  Serial.println("Start!");
 }
 
 
@@ -198,24 +197,25 @@ void loop() {
   }
 
   // Read from conveyor Arduino
-  if (Serial1.available() > 1) {
-    // Transmit step data from Arduino slave to computer.
-    byte code = Serial1.read();
-    if (code == CODEFORWARD) {  // Throw out first byte
-      Serial.print(code_conveyer_steps);
-      Serial.print(DELIM);
-      Serial.print(ts);
-      Serial.print(DELIM);
-      Serial.println(Serial1.read());
-    }
-    else if (code == CODEBACKWARD) {  // Throw out first byte
-      Serial.print(code_conveyer_steps);
-      Serial.print(DELIM);
-      Serial.print(ts);
-      Serial.print(DELIM);
-      Serial.println(-int(Serial1.read()));
-    }
-  }
+  // Let's not do anyting for now...
+  // if (Serial1.available() > 1) {
+  //   // Transmit step data from Arduino slave to computer.
+  //   byte code = Serial1.read();
+  //   if (code == CODEFORWARD) {  // Throw out first byte
+  //     Serial.print(code_conveyer_steps);
+  //     Serial.print(DELIM);
+  //     Serial.print(ts);
+  //     Serial.print(DELIM);
+  //     Serial.println(Serial1.read());
+  //   }
+  //   else if (code == CODEBACKWARD) {  // Throw out first byte
+  //     Serial.print(code_conveyer_steps);
+  //     Serial.print(DELIM);
+  //     Serial.print(ts);
+  //     Serial.print(DELIM);
+  //     Serial.println(-int(Serial1.read()));
+  //   }
+  // }
   
   // -- 1. SESSION CONTROL -- //
 

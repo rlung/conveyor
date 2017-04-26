@@ -263,7 +263,7 @@ class InputManager(tk.Frame):
         self.fig, self.ax = plt.subplots(figsize=(8, 2))
         self.ax.set_xlabel("Trial time (ms)")
         self.ax.set_ylabel("Relative velocity")
-        self.ax.set_xlim(-history, 0)
+        self.ax.set_xlim(0, history)
         self.ax.set_ylim(-50, 50)
         self.vel_trace, = self.ax.plot([], [], c=self.color_vel)
         self.ax.axhline(y=0, linestyle='--', linewidth=1, color='0.5')
@@ -271,6 +271,7 @@ class InputManager(tk.Frame):
         self.plot_canvas = FigureCanvasTkAgg(self.fig, monitor_frame)
         self.fig.tight_layout()
         self.plot_canvas.show()
+        self.plot_canvas.draw()
         self.plot_canvas.get_tk_widget().grid(row=0, column=0, rowspan=2, sticky=tk.W+tk.E+tk.N+tk.S)
 
         ##### SCOREBOARD #####
@@ -425,7 +426,10 @@ class InputManager(tk.Frame):
 
     def cam_preview(self):
         if not self.var_cam_state.get():
-            self.cam_start()
+            state = self.cam_start()
+            if state:
+                print("Unable to start camera")
+                return
 
         start_time = time.clock()
         frame_dur = 1000. / self.var_fps.get()
@@ -673,10 +677,9 @@ class InputManager(tk.Frame):
                 return
 
             elif code == code_trial_start:
-                self.trial_onset[self.counter['trial']] = ts
-                # self.counter['trial'] += 1
-
                 manual = bool(q_in[2])
+
+                self.trial_onset[self.counter['trial']] = ts
                 self.trial_manual[self.counter['trial']] = manual
 
             elif code == code_rail_leave:
@@ -700,23 +703,32 @@ class InputManager(tk.Frame):
                 self.track[:, self.counter['track']] = [ts, dist]
 
                 # Update plot
+                x0 = ts - history
                 X, Y = self.vel_trace.get_data()
-                self.vel_trace.set_data([
-                    np.append(X, ts),
-                    np.append(Y, dist)
-                ])
-                self.ax.set_xlim(ts-history, ts)
-                
-                
+                X = np.append(X, ts)
+                Y = np.append(Y, dist)
+                recent_pts = X >= x0
+
+                if any(recent_pts):
+                    X = X[recent_pts]
+                    Y = Y[recent_pts]
+
+                    self.vel_trace.set_data(X, Y)
+                    self.ax.set_xlim(x0, ts)
+
+                    self.ax.draw_artist(self.vel_trace)
+                    self.fig.canvas.blit(self.ax.bbox)
+                    self.fig.canvas.show()
+
                 # Increment counter
                 self.counter['track'] += 1
 
-        # Increment GUI update counter
-        self.gui_update_ct += 1
+        # # Increment GUI update counter
+        # self.gui_update_ct += 1
         
-        # Update plot every 0.5 s
-        if self.gui_update_ct % 5 == 0:
-            self.plot_canvas.draw()
+        # # Update plot every 0.5 s
+        # if self.gui_update_ct % 5 == 0:
+        #     self.plot_canvas.draw()
 
         self.parent.after(refresh_rate, self.update_session, data_file)
 
