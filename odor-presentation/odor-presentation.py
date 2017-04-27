@@ -7,7 +7,9 @@ Creates GUI to control behavioral and imaging devices for in vivo calcium
 imaging. Script interfaces with Arduino microcontroller and imaging devices.
 """
 
-# from Tkinter import *
+if os.name == 'nt':
+    import matplotlib
+    matplotlib.use('GTKAgg')
 import Tkinter as tk
 import tkMessageBox
 import tkFileDialog
@@ -50,6 +52,49 @@ subsamp = {1: 1,
            2: 2,
            3: 4,
            4: 8}
+
+
+def record(q_in, q_out, ts,
+           cam, frames,
+           vsub, hsub, gain, exposure_time,
+           frame_dur, session_length):
+    
+    # Grabs frames from `cam` object.
+
+    print("Recording...")
+    start_time = time.clock()
+    next_frame = start_time
+    nframes = len(ts)
+
+    f = 0
+    while (time.clock() - start_time < session_length and
+           f < nframes):
+
+        # Look for stop signal
+        if not q_in.empty():
+            if q_in.get() == 0:
+                print("Recording stopped: {}".format(time.clock() - start_time))
+                q_out.put(f)
+                return
+
+        # Wait for start of next frame
+        while time.clock() < next_frame:
+            pass
+
+        # Record frame and timestamp
+        ts[f] = time.clock() - start_time
+        frames[f, ...] = cam.grab_image(
+            vsub=subsamp[vsub],
+            hsub=subsamp[hsub],
+            gain=gain,
+            exposure_time='{}ms'.format(exposure_time))
+        
+        # Increment timer/counter
+        next_frame += frame_dur
+        f += 1
+
+    print("Recording time: {}".format(time.clock() - start_time))
+    q_out.put(f)
 
 
 class InputManager(tk.Frame):
@@ -149,10 +194,11 @@ class InputManager(tk.Frame):
         # Hardware parameters
         hardware_frame = tk.Frame(frame_parameter)
         hardware_frame.grid(row=0, column=1)
+        hardware_frame.grid_columnconfigure(1, weight=1)
 
         ## Camera preview
         self.frame_preview = tk.Frame(hardware_frame)
-        self.frame_preview.grid(row=0, column=0, rowspan=3, sticky=tk.W+tk.E+tk.N+tk.S)
+        self.frame_preview.grid(row=0, column=0, rowspan=3, sticky='wens')
 
         self.fig_preview, self.ax_preview = plt.subplots(figsize=(1280./1024 * 3.0, 3.0))
         self.fig_preview.subplots_adjust(left=0, bottom=0, right=1, top=1, wspace=0, hspace=0)
@@ -164,11 +210,11 @@ class InputManager(tk.Frame):
         self.canvas_preview = FigureCanvasTkAgg(self.fig_preview, self.frame_preview)
         self.canvas_preview.show()
         self.canvas_preview.draw()
-        self.canvas_preview.get_tk_widget().grid(row=0, column=0, sticky=tk.W+tk.E+tk.N+tk.S)
+        self.canvas_preview.get_tk_widget().grid(row=0, column=0, sticky='wens')
 
         ## UI for camera
         self.frame_cam = tk.LabelFrame(hardware_frame, text="Camera")
-        self.frame_cam.grid(row=0, column=1, padx=px, pady=py, sticky=tk.W+tk.E)
+        self.frame_cam.grid(row=0, column=1, padx=px, pady=py, sticky='we')
 
         self.var_cam_state = tk.BooleanVar()
         self.var_fps = tk.IntVar()
@@ -197,7 +243,7 @@ class InputManager(tk.Frame):
 
         ## UI for Arduino
         serial_frame = tk.LabelFrame(hardware_frame, text="Arduino")
-        serial_frame.grid(row=1, column=1, padx=5, pady=5, sticky=tk.W+tk.E)
+        serial_frame.grid(row=1, column=1, padx=5, pady=5, sticky='we')
         self.ser = None
         self.port_var = tk.StringVar()
 
@@ -224,10 +270,16 @@ class InputManager(tk.Frame):
 
         ## UI for debug options
         debug_frame = tk.LabelFrame(hardware_frame, text="Debugging")
-        debug_frame.grid(row=2, column=1, padx=10, pady=5, sticky=tk.W+tk.E)
+        debug_frame.grid(row=2, column=1, padx=10, pady=5, sticky='we')
+        
         self.print_var = tk.BooleanVar()
-        self.check_print = tk.Checkbutton(debug_frame, text="Print Arduino output", variable=self.print_var)
-        self.check_print.grid(row=0, column=0)
+        self.var_sim_hardware = tk.BooleanVar()
+
+        self.check_print = tk.Checkbutton(debug_frame, text=" Print Arduino output", variable=self.print_var)
+        self.check_sim_hardware = tk.Checkbutton(debug_frame, text=" Simulate hardware", variable=self.var_sim_hardware)
+
+        self.check_print.grid(row=0, column=0, padx=px1, pady=py1, sticky='w')
+        self.check_sim_hardware.grid(row=1, column=0, padx=px1, pady=py1, sticky='w')
 
         # Start frame
         start_frame = tk.Frame(frame_parameter)
@@ -241,6 +293,7 @@ class InputManager(tk.Frame):
         self.button_save_file = tk.Button(start_frame, text="...", command=self.get_save_file)
         self.button_start = tk.Button(start_frame, text="Start", command=lambda: self.parent.after(0, self.start))
         self.button_stop = tk.Button(start_frame, text="Stop", command=lambda: self.stop.set(True))
+
         self.entry_save.grid(row=1, column=0, sticky=tk.N+tk.S+tk.W+tk.E)
         self.button_save_file.grid(row=1, column=1, padx=5)
         self.button_start.grid(row=1, column=2, sticky=tk.N+tk.S, padx=5)
@@ -350,6 +403,8 @@ class InputManager(tk.Frame):
         self.track = np.empty(0)
         self.counter = {}
         self.q = Queue()
+        self.q_to_thread_rec = Queue()
+        self.q_from_thread_rec = Queue()
         self.gui_update_ct = 0  # count number of times GUI has been updated
 
     def update_instruments(self):
@@ -566,12 +621,6 @@ class InputManager(tk.Frame):
             obj.delete(0, tk.END)
 
         # Initialize/clear old data
-        self.trial_onset = np.zeros(1000, dtype='uint32')
-        self.trial_manual = np.zeros(1000, dtype=bool)
-        self.rail_leave = np.zeros(1000, dtype='uint32')
-        self.rail_home = np.zeros(1000, dtype='uint32')
-        self.steps = np.zeros((2, 360000), dtype='int32')
-        self.track = np.zeros((2, 360000), dtype='int32')
         self.counter = {
             'trial': 0,
             'track': 0,
@@ -602,7 +651,7 @@ class InputManager(tk.Frame):
     def start(self):
         self.gui_util('start')
 
-        # Finish setup
+        # Create data file
         if self.entry_save.get():
             try:
                 # Create file if it doesn't already exist ('x' parameter)
@@ -619,24 +668,52 @@ class InputManager(tk.Frame):
             now = datetime.now()
             filename = 'data/data-' + now.strftime('%y%m%d-%H%M%S') + '.h5'
             data_file = h5py.File(filename, 'x')
-        
-        # Run session
-        self.ser.flushInput()                                   # Remove data from serial input
-        self.ser.write('E')                                     # Start signal for Arduino
 
+        behav_grp = data_file.create_group('behavior')
+        behav_grp.create_dataset(name='trials', dtype='uint32', shape=(1000, ))
+        behav_grp.create_dataset(name='trial_type', dtype=bool, shape=(1000, ))
+        behav_grp.create_dataset(name='rail_leave', dtype='uint32', shape=(1000, ))
+        behav_grp.create_dataset(name='rail_home', dtype='uint32', shape=(1000, ))
+        behav_grp.create_dataset(name='steps', dtype='int32', shape=(2, 36000))
+        behav_grp.create_dataset(name='track', dtype='int32', shape=(2, 36000))
+        
+        # Store session parameters into behavior group
+        for key, value in self.parameters.iteritems():
+            behav_grp.attrs[key] = value
+
+        # Create thread to scan serial
+        thread_scan = threading.Thread(
+            target=scan_serial,
+            args=(self.q, self.ser, self.parameters, self.print_var.get()))
+
+        # # Create thread to record from camera
+        # frame_dur_s = 1. / fps
+        # exposure_time = frame_dur_s * 1000 * self.var_expo.get()/100.
+        # thread_rec = threading.Thread(
+        #     target=record,
+        #     args=(
+        #         self.q_to_thread_rec, self.q_from_thread_rec, self.ts,
+        #         self.regcam, self.reg_dset,
+        #         self.var_vsub.get(), self.var_hsub.get(), self.var_gain.get(), exposure_time,
+        #         frame_dur_s, session_length
+        #     )
+        # )
+
+        # Run session
         start_time = datetime.now()
         approx_end = start_time + timedelta(milliseconds=self.parameters['trial_duration'])
         self.start_time = start_time.strftime("%H:%M:%S")
         print("Session start ~ {}".format(self.start_time))
         self.entry_start.insert(0, self.start_time)
         self.entry_end.insert(0, '~' + approx_end.strftime("%H:%M:%S"))
+        behav_grp.attrs['start_time'] = self.start_time
 
-        # Create thread to scan serial
-        thread_scan = threading.Thread(target=scan_serial,
-                                       args=(self.q, self.ser, self.parameters, self.print_var.get()))
+        self.ser.flushInput()                                   # Remove data from serial input
+        self.ser.write('E')                                     # Start signal for Arduino
         thread_scan.start()
+        # thread_rec.start()
 
-        # Update GUI alongside Arduino scanning (scan_serial on separate thread)
+        # Update GUI
         self.update_session(data_file)
 
     def update_session(self, data_file):
@@ -716,9 +793,10 @@ class InputManager(tk.Frame):
                     self.vel_trace.set_data(X, Y)
                     self.ax.set_xlim(x0, ts)
 
-                    self.ax.draw_artist(self.vel_trace)
-                    self.fig.canvas.blit(self.ax.bbox)
-                    self.fig.canvas.show()
+                    # self.ax.draw_artist(self.vel_trace)
+                    # self.fig.canvas.blit(self.ax.bbox)
+                    # self.fig.canvas.show()
+                    self.fig.canvas.draw_idle()
 
                 # Increment counter
                 self.counter['track'] += 1
@@ -733,25 +811,21 @@ class InputManager(tk.Frame):
         self.parent.after(refresh_rate, self.update_session, data_file)
 
     def stop_session(self, data_file):
+        end_time = datetime.now().strftime("%H:%M:%S")
         self.gui_util('stop')
         self.close_serial()
-        end_time = datetime.now().strftime("%H:%M:%S")
 
         if data_file:
-            behav_grp = data_file.create_group('behavior')
-            behav_grp.create_dataset(name='trials', data=self.trial_onset[:self.counter['trial']])
-            behav_grp.create_dataset(name='trial_type', data=self.trial_manual[:self.counter['trial']])
-            behav_grp.create_dataset(name='rail_leave', data=self.rail_leave[:self.counter['trial']])
-            behav_grp.create_dataset(name='rail_home', data=self.rail_home[:self.counter['trial']])
-            behav_grp.create_dataset(name='steps', data=self.steps[:, :self.counter['steps']])
-            behav_grp.create_dataset(name='track', data=self.track[:, :self.counter['track']])
-            
-            # Store session parameters into behavior group
-            behav_grp.attrs['start_time'] = self.start_time
             behav_grp.attrs['end_time'] = end_time
-            for key, value in self.parameters.iteritems():
-                behav_grp.attrs[key] = value
-            
+
+            # Truncate datasets
+            behav_grp['trials'].resize((self.counter['trials'], ))
+            behav_grp['trial_type'].resize((self.counter['trials'], ))
+            behav_grp['rail_leave'].resize((self.counter['trials'], ))
+            behav_grp['rail_home'].resize((self.counter['trials'], ))
+            behav_grp['steps'].resize((2, self.counter['steps']))
+            behav_grp['track'].resize((2, self.counter['track']))
+
             # Close HDF5 file object
             data_file.close()
         
@@ -761,8 +835,8 @@ class InputManager(tk.Frame):
         print "Session ended at " + end_time
 
         # Slack that session is done.
-        if self.entry_slack.get() and \
-           slack:
+        if (self.entry_slack.get() and \
+            slack):
             slack_msg(self.entry_slack.get(), "Session ended.")
 
 
