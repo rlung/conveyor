@@ -6,10 +6,10 @@ Odor presentation
 Creates GUI to control behavioral and imaging devices for in vivo calcium
 imaging. Script interfaces with Arduino microcontroller and imaging devices.
 """
-
-if os.name == 'nt':
-    import matplotlib
-    matplotlib.use('GTKAgg')
+# import os
+# if os.name == 'nt':
+#     import matplotlib
+#     matplotlib.use('GTKAgg')
 import Tkinter as tk
 import tkMessageBox
 import tkFileDialog
@@ -669,17 +669,17 @@ class InputManager(tk.Frame):
             filename = 'data/data-' + now.strftime('%y%m%d-%H%M%S') + '.h5'
             data_file = h5py.File(filename, 'x')
 
-        behav_grp = data_file.create_group('behavior')
-        behav_grp.create_dataset(name='trials', dtype='uint32', shape=(1000, ))
-        behav_grp.create_dataset(name='trial_type', dtype=bool, shape=(1000, ))
-        behav_grp.create_dataset(name='rail_leave', dtype='uint32', shape=(1000, ))
-        behav_grp.create_dataset(name='rail_home', dtype='uint32', shape=(1000, ))
-        behav_grp.create_dataset(name='steps', dtype='int32', shape=(2, 36000))
-        behav_grp.create_dataset(name='track', dtype='int32', shape=(2, 36000))
+        self.behav_grp = data_file.create_group('behavior')
+        self.trial_onset = self.behav_grp.create_dataset(name='trials', dtype='uint32', shape=(1000, ), chunks=(1, ))
+        self.trial_manual = self.behav_grp.create_dataset(name='trial_type', dtype=bool, shape=(1000, ), chunks=(1, ))
+        self.rail_leave = self.behav_grp.create_dataset(name='rail_leave', dtype='uint32', shape=(1000, ), chunks=(1, ))
+        self.rail_home = self.behav_grp.create_dataset(name='rail_home', dtype='uint32', shape=(1000, ), chunks=(1, ))
+        self.steps = self.behav_grp.create_dataset(name='steps', dtype='int32', shape=(2, 36000), chunks=(2, 1))
+        self.track = self.behav_grp.create_dataset(name='track', dtype='int32', shape=(2, 36000), chunks=(2, 1))
         
         # Store session parameters into behavior group
         for key, value in self.parameters.iteritems():
-            behav_grp.attrs[key] = value
+            self.behav_grp.attrs[key] = value
 
         # Create thread to scan serial
         thread_scan = threading.Thread(
@@ -706,7 +706,7 @@ class InputManager(tk.Frame):
         print("Session start ~ {}".format(self.start_time))
         self.entry_start.insert(0, self.start_time)
         self.entry_end.insert(0, '~' + approx_end.strftime("%H:%M:%S"))
-        behav_grp.attrs['start_time'] = self.start_time
+        self.behav_grp.attrs['start_time'] = self.start_time
 
         self.ser.flushInput()                                   # Remove data from serial input
         self.ser.write('E')                                     # Start signal for Arduino
@@ -816,15 +816,15 @@ class InputManager(tk.Frame):
         self.close_serial()
 
         if data_file:
-            behav_grp.attrs['end_time'] = end_time
+            self.behav_grp.attrs['end_time'] = end_time
 
             # Truncate datasets
-            behav_grp['trials'].resize((self.counter['trials'], ))
-            behav_grp['trial_type'].resize((self.counter['trials'], ))
-            behav_grp['rail_leave'].resize((self.counter['trials'], ))
-            behav_grp['rail_home'].resize((self.counter['trials'], ))
-            behav_grp['steps'].resize((2, self.counter['steps']))
-            behav_grp['track'].resize((2, self.counter['track']))
+            self.behav_grp['trials'].resize((self.counter['trial'], ))
+            self.behav_grp['trial_type'].resize((self.counter['trial'], ))
+            self.behav_grp['rail_leave'].resize((self.counter['trial'], ))
+            self.behav_grp['rail_home'].resize((self.counter['trial'], ))
+            self.behav_grp['steps'].resize((2, self.counter['steps']))
+            self.behav_grp['track'].resize((2, self.counter['track']))
 
             # Close HDF5 file object
             data_file.close()
