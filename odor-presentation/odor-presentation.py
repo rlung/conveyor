@@ -134,14 +134,34 @@ class InputManager(tk.Frame):
         ###########################
         frame_parameter = tk.Frame(parent)
         frame_parameter.grid(row=0, column=0)
+        frame_parameter.grid_columnconfigure(0, weight=1)
+        frame_parameter.grid_columnconfigure(1, weight=1)
+        frame_parameter.grid_columnconfigure(2, weight=1)
 
         # Session parameters frame
         session_frame = tk.Frame(frame_parameter)
-        session_frame.grid(row=0, column=2, padx=15, pady=5)
+        session_frame.grid(row=0, column=0, padx=15, pady=5)
+        session_frame.columnconfigure(0, weight=1)
+
+        ## Camera preview
+        self.frame_preview = tk.Frame(session_frame)
+        self.frame_preview.grid(row=0, column=0, sticky='wens')
+
+        self.fig_preview, self.ax_preview = plt.subplots(figsize=(1280./1024 * 2.5, 2.5))
+        self.fig_preview.subplots_adjust(left=0, bottom=0, right=1, top=1, wspace=0, hspace=0)
+        self.im = self.ax_preview.imshow(np.zeros((1024, 1280)), vmin=1, vmax=254, cmap='gray', interpolation='none')
+        self.im.cmap.set_under('b')
+        self.im.cmap.set_over('r')
+        self.ax_preview.axis('image')
+        self.ax_preview.axis('off')
+        self.canvas_preview = FigureCanvasTkAgg(self.fig_preview, self.frame_preview)
+        self.canvas_preview.show()
+        self.canvas_preview.draw()
+        self.canvas_preview.get_tk_widget().grid(row=0, column=0, sticky='wens')
 
         ## UI for trial control
         session_prop_frame = tk.Frame(session_frame)
-        session_prop_frame.grid(row=0, column=0, sticky=tk.E, padx=15, pady=5)
+        session_prop_frame.grid(row=1, column=0, sticky='e', padx=15, pady=5)
 
         self.entry_session_dur = tk.Entry(session_prop_frame, width=entry_width)
         self.entry_trial_dur = tk.Entry(session_prop_frame, width=entry_width)
@@ -152,31 +172,13 @@ class InputManager(tk.Frame):
 
         ## UI for tracking
         track_frame = tk.Frame(session_frame)
-        track_frame.grid(row=1, column=0, sticky=tk.E, padx=15, pady=5)
+        track_frame.grid(row=2, column=0, sticky='e', padx=15, pady=5)
         self.entry_track_period = tk.Entry(track_frame, width=entry_width)
         self.entry_track_steps = tk.Entry(track_frame, width=entry_width)
         tk.Label(track_frame, text="Track period (ms): ", anchor=tk.E).grid(row=0, column=0, sticky=tk.E)
         tk.Label(track_frame, text="Track steps: ", anchor=tk.E).grid(row=1, column=0, sticky=tk.E)
         self.entry_track_period.grid(row=0, column=1, sticky=tk.W)
         self.entry_track_steps.grid(row=1, column=1, sticky=tk.W)
-
-        ## Misc
-        frame_misc = tk.Frame(session_frame)
-        frame_misc.grid(row=2, column=0, padx=5, pady=5, sticky=tk.N+tk.S+tk.W+tk.E)
-
-        frame_notes = tk.Frame(frame_misc)
-        frame_notes.grid(sticky=tk.N+tk.S+tk.W+tk.E, padx=15, pady=5)
-        tk.Label(frame_notes, text="Notes:").grid(row=0, column=0, sticky=tk.W)
-        self.scrolled_notes = ScrolledText(frame_notes, width=20, height=15)
-        self.scrolled_notes.grid(row=1, column=0, sticky=tk.N+tk.S+tk.W+tk.E)
-
-        frame_slack = tk.Frame(frame_misc)
-        frame_slack.grid(row=1, sticky=tk.W+tk.E, padx=15, pady=5)
-        tk.Label(frame_slack, text="Slack address: ", anchor=tk.W).grid(row=0, column=0, sticky=tk.W+tk.E)
-        self.entry_slack = tk.Entry(frame_slack)
-        self.entry_slack.grid(row=1, column=0, sticky=tk.N+tk.S+tk.W+tk.E)
-        self.button_slack = tk.Button(frame_slack, text="", command=lambda: slack_msg(self.entry_slack.get(), "Test", test=True))
-        self.button_slack.grid(row=1, column=1, padx=5, sticky=tk.W)
         
         # # Options frame
         # opt_session_frame = tk.Frame(frame_parameter)
@@ -194,27 +196,11 @@ class InputManager(tk.Frame):
         # Hardware parameters
         hardware_frame = tk.Frame(frame_parameter)
         hardware_frame.grid(row=0, column=1)
-        hardware_frame.grid_columnconfigure(1, weight=1)
-
-        ## Camera preview
-        self.frame_preview = tk.Frame(hardware_frame)
-        self.frame_preview.grid(row=0, column=0, rowspan=3, sticky='wens')
-
-        self.fig_preview, self.ax_preview = plt.subplots(figsize=(1280./1024 * 3.0, 3.0))
-        self.fig_preview.subplots_adjust(left=0, bottom=0, right=1, top=1, wspace=0, hspace=0)
-        self.im = self.ax_preview.imshow(np.zeros((1024, 1280)), vmin=1, vmax=254, cmap='gray', interpolation='none')
-        self.im.cmap.set_under('b')
-        self.im.cmap.set_over('r')
-        self.ax_preview.axis('image')
-        self.ax_preview.axis('off')
-        self.canvas_preview = FigureCanvasTkAgg(self.fig_preview, self.frame_preview)
-        self.canvas_preview.show()
-        self.canvas_preview.draw()
-        self.canvas_preview.get_tk_widget().grid(row=0, column=0, sticky='wens')
+        hardware_frame.grid_columnconfigure(0, weight=1)
 
         ## UI for camera
         self.frame_cam = tk.LabelFrame(hardware_frame, text="Camera")
-        self.frame_cam.grid(row=0, column=1, padx=px, pady=py, sticky='we')
+        self.frame_cam.grid(row=0, column=0, padx=px, pady=py, sticky='we')
 
         self.var_cam_state = tk.BooleanVar()
         self.var_fps = tk.IntVar()
@@ -223,6 +209,7 @@ class InputManager(tk.Frame):
         self.var_gain = tk.IntVar()
         self.var_expo = tk.IntVar()
         self.var_instr = tk.StringVar()
+
         self.option_instr = tk.OptionMenu(self.frame_cam,
             self.var_instr, [])
         self.option_instr.configure(anchor=tk.W)
@@ -232,10 +219,11 @@ class InputManager(tk.Frame):
             text="Preview", command=self.cam_preview)
         self.button_settings = tk.Button(self.frame_cam,
             text="Settings", command=self.cam_settings)
-        self.option_instr.grid(row=1, column=0, columnspan=2, padx=px1, pady=py1, sticky=tk.W)
-        self.button_refresh_instr.grid(row=2, column=0, padx=px1, pady=py1, sticky=tk.W)
-        self.button_preview.grid(row=2, column=1, padx=px1, pady=py1, sticky=tk.W)
-        self.button_settings.grid(row=2, column=2, padx=px1, pady=py1, sticky=tk.W)
+
+        self.option_instr.grid(row=1, column=0, columnspan=3, padx=px1, pady=py1, sticky='we')
+        self.button_refresh_instr.grid(row=2, column=0, padx=px1, pady=py1, sticky='we')
+        self.button_preview.grid(row=2, column=1, padx=px1, pady=py1, sticky='we')
+        self.button_settings.grid(row=2, column=2, padx=px1, pady=py1, sticky='we')
         self.instrument_panels = [
             self.option_instr,
             self.button_refresh_instr,
@@ -243,34 +231,41 @@ class InputManager(tk.Frame):
 
         ## UI for Arduino
         serial_frame = tk.LabelFrame(hardware_frame, text="Arduino")
-        serial_frame.grid(row=1, column=1, padx=5, pady=5, sticky='we')
-        self.ser = None
+        serial_frame.grid(row=1, column=0, padx=px, pady=py, sticky='we')
+
         self.port_var = tk.StringVar()
 
+        ###
         serial_ports_frame = tk.Frame(serial_frame)
         serial_ports_frame.grid(row=0, column=0, columnspan=2, sticky=tk.W)
+
         tk.Label(serial_ports_frame, text="Serial port:").grid(row=0, column=0, sticky=tk.E, padx=5)
         self.option_ports = tk.OptionMenu(serial_ports_frame, self.port_var, [])
         self.option_ports.grid(row=0, column=1, sticky=tk.W+tk.E, padx=5)
         tk.Label(serial_ports_frame, text="Serial status:").grid(row=1, column=0, sticky=tk.E, padx=5)
         self.entry_serial_status = tk.Entry(serial_ports_frame)
+
         self.entry_serial_status.grid(row=1, column=1, sticky=tk.W, padx=5)
-        self.entry_serial_status['state'] = 'normal'
         self.entry_serial_status.insert(0, 'Closed')
+
+        self.entry_serial_status['state'] = 'normal'
         self.entry_serial_status['state'] = 'readonly'
 
+        ###
         open_close_frame = tk.Frame(serial_frame)
         open_close_frame.grid(row=1, column=0, columnspan=2, pady=10)
+
         self.button_open_port = tk.Button(open_close_frame, text="Open", command=self.open_serial)
         self.button_close_port = tk.Button(open_close_frame, text="Close", command=self.close_serial)
         self.button_update_ports = tk.Button(open_close_frame, text="Update", command=self.update_ports)
+
         self.button_open_port.grid(row=0, column=0, pady=5)
         self.button_close_port.grid(row=0, column=1, padx=10, pady=5)
         self.button_update_ports.grid(row=0, column=2, pady=5)
 
         ## UI for debug options
         debug_frame = tk.LabelFrame(hardware_frame, text="Debugging")
-        debug_frame.grid(row=2, column=1, padx=10, pady=5, sticky='we')
+        debug_frame.grid(row=2, column=0, padx=px, pady=py, sticky='we')
         
         self.print_var = tk.BooleanVar()
         self.var_sim_hardware = tk.BooleanVar()
@@ -281,23 +276,55 @@ class InputManager(tk.Frame):
         self.check_print.grid(row=0, column=0, padx=px1, pady=py1, sticky='w')
         self.check_sim_hardware.grid(row=1, column=0, padx=px1, pady=py1, sticky='w')
 
-        # Start frame
-        start_frame = tk.Frame(frame_parameter)
-        start_frame.grid(row=3, column=0, columnspan=2, padx=5, pady=15, sticky=tk.W+tk.E)
-        start_frame.columnconfigure(0, weight=4)
+        # Frame for file
+        frame_file = tk.Frame(frame_parameter)
+        frame_file.grid(row=0, column=2, padx=5, pady=5, sticky='wens')
+        frame_file.columnconfigure(0, weight=1)
 
-        tk.Label(start_frame, text="File to save data:", anchor=tk.W).grid(row=0, column=0, sticky=tk.W)
+        ## Notes
+        frame_notes = tk.Frame(frame_file)
+        frame_notes.grid(row=0, sticky='wens', padx=px, pady=py)
+        frame_notes.grid_columnconfigure(0, weight=1)
+
+        tk.Label(frame_notes, text="Notes:").grid(row=0, column=0, sticky='w')
+        self.scrolled_notes = ScrolledText(frame_notes, width=20, height=15)
+
+        self.scrolled_notes.grid(row=1, column=0, sticky='wens')
+
+        ## Slack
+        frame_slack = tk.Frame(frame_file)
+        frame_slack.grid(row=1, sticky='we', padx=px, pady=py)
+        frame_slack.grid_columnconfigure(0, weight=3)
+        frame_slack.grid_columnconfigure(1, weight=1)
+
+        tk.Label(frame_slack, text="Slack address: ", anchor='w').grid(row=0, column=0, sticky='we')
+        self.entry_slack = tk.Entry(frame_slack)
+        self.button_slack = tk.Button(frame_slack, text="", command=lambda: slack_msg(self.entry_slack.get(), "Test", test=True))
+
+        self.entry_slack.grid(row=1, column=0, sticky='wens')
+        self.button_slack.grid(row=1, column=1, sticky='e')
+
+        ## Start frame
+        start_frame = tk.Frame(frame_file)
+        start_frame.grid(row=2, column=0, columnspan=2, padx=px, pady=py, sticky='we')
+        start_frame.columnconfigure(0, weight=1)
+        start_frame.columnconfigure(1, weight=1)
+        start_frame.columnconfigure(2, weight=1)
+        start_frame.columnconfigure(3, weight=1)
+
         self.stop = tk.BooleanVar()
         self.stop.set(False)
+
+        tk.Label(start_frame, text="File to save data:", anchor=tk.W).grid(row=0, column=0, columnspan=4, sticky=tk.W)
         self.entry_save = tk.Entry(start_frame)
         self.button_save_file = tk.Button(start_frame, text="...", command=self.get_save_file)
         self.button_start = tk.Button(start_frame, text="Start", command=lambda: self.parent.after(0, self.start))
         self.button_stop = tk.Button(start_frame, text="Stop", command=lambda: self.stop.set(True))
 
-        self.entry_save.grid(row=1, column=0, sticky=tk.N+tk.S+tk.W+tk.E)
-        self.button_save_file.grid(row=1, column=1, padx=5)
-        self.button_start.grid(row=1, column=2, sticky=tk.N+tk.S, padx=5)
-        self.button_stop.grid(row=1, column=3, sticky=tk.N+tk.S, padx=5)
+        self.entry_save.grid(row=1, column=0, columnspan=3, sticky='wens')
+        self.button_save_file.grid(row=1, column=4, sticky='e')
+        self.button_start.grid(row=2, column=0, sticky='w')
+        self.button_stop.grid(row=2, column=1, sticky='w')
 
         ###########################
         ###### MONITOR FRAME ######
@@ -387,7 +414,6 @@ class InputManager(tk.Frame):
         self.entry_track_steps.insert(0, 5)
         self.print_var.set(True)
         self.button_close_port['state'] = 'disabled'
-        # self.entry_slack.insert(0, "@randall")
         self.button_start['state'] = 'disabled'
         self.button_stop['state'] = 'disabled'
         self.var_fps.set(5)
@@ -398,9 +424,8 @@ class InputManager(tk.Frame):
 
         ###### SESSION VARIABLES ######
         self.parameters = collections.OrderedDict()
-        self.ser = serial.Serial(timeout=1, baudrate=9600)
+        self.ser = serial.Serial(timeout=0, baudrate=9600)
         self.start_time = ""
-        self.track = np.empty(0)
         self.counter = {}
         self.q = Queue()
         self.q_to_thread_rec = Queue()
@@ -458,11 +483,11 @@ class InputManager(tk.Frame):
         scale_hsub.set(self.var_hsub.get())
         scale_gain.set(self.var_gain.get())
         scale_expo.set(self.var_expo.get())
-        scale_fps.grid(row=1, column=1, sticky=tk.W+tk.E)
-        scale_vsub.grid(row=2, column=1, sticky=tk.W+tk.E)
-        scale_hsub.grid(row=3, column=1, sticky=tk.W+tk.E)
-        scale_gain.grid(row=4, column=1, sticky=tk.W+tk.E)
-        scale_expo.grid(row=5, column=1, sticky=tk.W+tk.E)
+        scale_fps.grid(row=1, column=1, sticky='we')
+        scale_vsub.grid(row=2, column=1, sticky='we')
+        scale_hsub.grid(row=3, column=1, sticky='we')
+        scale_gain.grid(row=4, column=1, sticky='we')
+        scale_expo.grid(row=5, column=1, sticky='we')
 
         # frame_status = tk.Frame(self.window_cam)
         # frame_status.grid(row=2)
@@ -670,12 +695,12 @@ class InputManager(tk.Frame):
             data_file = h5py.File(filename, 'x')
 
         self.behav_grp = data_file.create_group('behavior')
-        self.trial_onset = self.behav_grp.create_dataset(name='trials', dtype='uint32', shape=(1000, ), chunks=(1, ))
-        self.trial_manual = self.behav_grp.create_dataset(name='trial_type', dtype=bool, shape=(1000, ), chunks=(1, ))
-        self.rail_leave = self.behav_grp.create_dataset(name='rail_leave', dtype='uint32', shape=(1000, ), chunks=(1, ))
-        self.rail_home = self.behav_grp.create_dataset(name='rail_home', dtype='uint32', shape=(1000, ), chunks=(1, ))
-        self.steps = self.behav_grp.create_dataset(name='steps', dtype='int32', shape=(2, 36000), chunks=(2, 1))
-        self.track = self.behav_grp.create_dataset(name='track', dtype='int32', shape=(2, 36000), chunks=(2, 1))
+        self.behav_grp.create_dataset(name='trials', dtype='uint32', shape=(1000, ), chunks=(1, ))
+        self.behav_grp.create_dataset(name='trial_manual', dtype=bool, shape=(1000, ), chunks=(1, ))
+        self.behav_grp.create_dataset(name='rail_leave', dtype='uint32', shape=(1000, ), chunks=(1, ))
+        self.behav_grp.create_dataset(name='rail_home', dtype='uint32', shape=(1000, ), chunks=(1, ))
+        self.behav_grp.create_dataset(name='steps', dtype='int32', shape=(2, 36000), chunks=(2, 1))
+        self.behav_grp.create_dataset(name='track', dtype='int32', shape=(2, 36000), chunks=(2, 1))
         
         # Store session parameters into behavior group
         for key, value in self.parameters.iteritems():
@@ -756,28 +781,28 @@ class InputManager(tk.Frame):
             elif code == code_trial_start:
                 manual = bool(q_in[2])
 
-                self.trial_onset[self.counter['trial']] = ts
-                self.trial_manual[self.counter['trial']] = manual
+                self.behav_grp['trials'][self.counter['trial']] = ts
+                self.behav_grp['trial_manual'][self.counter['trial']] = manual
 
             elif code == code_rail_leave:
-                self.rail_leave[self.counter['trial']] = ts
+                self.behav_grp['rail_leave'][self.counter['trial']] = ts
 
             elif code == code_rail_home:
-                self.rail_home[self.counter['trial']] = ts
+                self.behav_grp['rail_home'][self.counter['trial']] = ts
                 self.counter['trial'] += 1
 
             elif code == code_steps:
                 dist = int(q_in[2])
 
                 # Record tracking
-                self.steps[:, self.counter['steps']] = [ts, dist]
+                self.behav_grp['steps'][:, self.counter['steps']] = [ts, dist]
                 self.counter['steps'] += 1
 
             elif code == code_track:
                 dist = int(q_in[2])
 
                 # Record tracking
-                self.track[:, self.counter['track']] = [ts, dist]
+                self.behav_grp['track'][:, self.counter['track']] = [ts, dist]
 
                 # Update plot
                 x0 = ts - history
@@ -820,7 +845,7 @@ class InputManager(tk.Frame):
 
             # Truncate datasets
             self.behav_grp['trials'].resize((self.counter['trial'], ))
-            self.behav_grp['trial_type'].resize((self.counter['trial'], ))
+            self.behav_grp['trial_manual'].resize((self.counter['trial'], ))
             self.behav_grp['rail_leave'].resize((self.counter['trial'], ))
             self.behav_grp['rail_home'].resize((self.counter['trial'], ))
             self.behav_grp['steps'].resize((2, self.counter['steps']))
