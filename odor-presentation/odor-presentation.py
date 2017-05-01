@@ -56,14 +56,13 @@ subsamp = {1: 1,
 
 def record(q_in, q_out, ts,
            cam, frames,
-           vsub, hsub, gain, exposure_time,
            frame_dur, session_length):
     
     # Grabs frames from `cam` object.
 
     print("Recording...")
     start_time = time.clock()
-    next_frame = start_time
+    # next_frame = start_time + frame_dur
     nframes = len(ts)
 
     f = 0
@@ -78,19 +77,16 @@ def record(q_in, q_out, ts,
                 return
 
         # Wait for start of next frame
-        while time.clock() < next_frame:
-            pass
+        # while time.clock() < next_frame:
+        #     pass
+        cam.wait_for_frame()
 
         # Record frame and timestamp
         ts[f] = time.clock() - start_time
-        frames[f, ...] = cam.grab_image(
-            vsub=subsamp[vsub],
-            hsub=subsamp[hsub],
-            gain=gain,
-            exposure_time='{}ms'.format(exposure_time))
+        frames[f, ...] = cam.latest_frame()
         
         # Increment timer/counter
-        next_frame += frame_dur
+        # next_frame += frame_dur
         f += 1
 
     print("Recording time: {}".format(time.clock() - start_time))
@@ -202,8 +198,8 @@ class InputManager(tk.Frame):
         self.frame_cam = tk.LabelFrame(hardware_frame, text="Camera")
         self.frame_cam.grid(row=0, column=0, padx=px, pady=py, sticky='we')
 
-        self.var_cam_state = tk.BooleanVar()
-        self.var_fps = tk.IntVar()
+        self.var_preview = tk.BooleanVar()
+        self.var_fps = tk.DoubleVar()
         self.var_vsub = tk.IntVar()
         self.var_hsub = tk.IntVar()
         self.var_gain = tk.IntVar()
@@ -423,6 +419,8 @@ class InputManager(tk.Frame):
         self.var_expo.set(100)
 
         ###### SESSION VARIABLES ######
+        self.cam = None
+        self.scale_fps = None
         self.parameters = collections.OrderedDict()
         self.ser = serial.Serial(timeout=0, baudrate=9600)
         self.start_time = ""
@@ -444,32 +442,60 @@ class InputManager(tk.Frame):
             self.var_instr.set("No instruments found")
 
     def cam_start(self):
-        instrs = list_instruments()
-        instr = [x for x in instrs if x.name == self.var_instr.get()]
-        if instr:
-            self.cam = instrument(instr[0])
-            self.var_cam_state.set(True)
-            # self.cam.start_live
-        else:
-            return 1
+        if not self.cam:
+            instrs = list_instruments()
+            instr = [x for x in instrs if x.name == self.var_instr.get()]
+            if instr:
+                self.cam = instrument(instr[0])
+            else:
+                return 1
+
+        fps = self.var_fps.get()
+        expo = self.var_expo.get()
+        exposure_time = (1000. / fps) * (expo / 100.)
+
+        self.cam.start_live_video(
+            framerate='{}Hz'.format(fps),
+            vsub=subsamp[self.var_vsub.get()],
+            hsub=subsamp[self.var_hsub.get()],
+            gain=self.var_gain.get(),
+            exposure_time='{}ms'.format(exposure_time)
+        )
+
+        self.var_fps.set(self.cam.framerate)
+        if self.scale_fps:
+            self.scale_fps.set(self.cam.framerate)
+
+        # instrs = list_instruments()
+        # instr = [x for x in instrs if x.name == self.var_instr.get()]
+        # if instr:
+        #     self.cam = instrument(instr[0])
+        #     self.var_cam_state.set(True)
+        #     # self.cam.start_live
+        # else:
+        #     return 1
 
     def cam_close(self):
         self.cam.close()
-        self.var_cam_state.set(True)
+        self.cam = None
 
     def cam_settings(self):
-        self.window_settings = tk.Toplevel(self)
-        self.window_settings.wm_title("Camera settings")
+        px = 15
+        py = 5
 
-        frame_settings = tk.Frame(self.window_settings)
+        window_settings = tk.Toplevel(self)
+        window_settings.wm_title("Camera settings")
+
+        frame_settings = tk.Frame(window_settings)
         frame_settings.grid()
-        tk.Label(frame_settings, text="FPS: ", anchor=tk.E).grid(row=1, column=0, sticky=tk.E)
-        tk.Label(frame_settings, text="Vertical subsampling: ", anchor=tk.E).grid(row=2, column=0, sticky=tk.E)
-        tk.Label(frame_settings, text="Horizontal subsampling: ", anchor=tk.E).grid(row=3, column=0, sticky=tk.E)
-        tk.Label(frame_settings, text="Gain: ", anchor=tk.E).grid(row=4, column=0, sticky=tk.E)
-        tk.Label(frame_settings, text="Exposure (% of frame): ", anchor=tk.E).grid(row=5, column=0, sticky=tk.E)
-        scale_fps = tk.Scale(frame_settings, orient='horizontal', from_=1, to=60,
-            command=self.var_fps.set)
+
+        tk.Label(frame_settings, text="FPS: ", anchor='e').grid(row=1, column=0, sticky='e')
+        tk.Label(frame_settings, text="Vertical subsampling: ", anchor='e').grid(row=2, column=0, sticky='e')
+        tk.Label(frame_settings, text="Horizontal subsampling: ", anchor='e').grid(row=3, column=0, sticky='e')
+        tk.Label(frame_settings, text="Gain: ", anchor='e').grid(row=4, column=0, sticky='e')
+        tk.Label(frame_settings, text="Exposure (% of frame): ", anchor='e').grid(row=5, column=0, sticky='e')
+        self.scale_fps = tk.Scale(frame_settings, orient='horizontal', from_=1, to=60,
+            command=self.var_fps.set, resolution=0.01)
         scale_vsub = tk.Scale(frame_settings, orient='horizontal', from_=1, to=4,
             command=self.var_vsub.set)
         scale_hsub = tk.Scale(frame_settings, orient='horizontal', from_=1, to=4,
@@ -478,68 +504,75 @@ class InputManager(tk.Frame):
             command=self.var_gain.set)
         scale_expo = tk.Scale(frame_settings, orient='horizontal', from_=1, to=100,
             command=self.var_expo.set)
-        scale_fps.set(self.var_fps.get())
+        self.scale_fps.set(self.var_fps.get())
         scale_vsub.set(self.var_vsub.get())
         scale_hsub.set(self.var_hsub.get())
         scale_gain.set(self.var_gain.get())
         scale_expo.set(self.var_expo.get())
-        scale_fps.grid(row=1, column=1, sticky='we')
+        button_update = tk.Button(frame_settings, text="Update preview",
+            command=self.cam_start)
+
+        self.scale_fps.grid(row=1, column=1, sticky='we')
         scale_vsub.grid(row=2, column=1, sticky='we')
         scale_hsub.grid(row=3, column=1, sticky='we')
         scale_gain.grid(row=4, column=1, sticky='we')
         scale_expo.grid(row=5, column=1, sticky='we')
+        button_update.grid(row=6, column=0, columnspan=2, padx=px, pady=py, sticky='we')
 
-        # frame_status = tk.Frame(self.window_cam)
-        # frame_status.grid(row=2)
-        # self.entry_status = tk.Entry(frame_status, foreground='red')
-        # self.entry_status.grid()
+        def close_protocol():
+            window_settings.destroy()
+            self.scale_fps = None
 
-        # def close_protocol():
-        #     self.cam_close()
-        #     self.window_cam.destroy()
-        #     self.window_cam = None
-
-        # self.window_cam.protocol('WM_DELETE_WINDOW', close_protocol)
-        # self.window_cam.transient(self)
-        # self.window_cam.grab_set()
-        # self.wait_window(self.window_cam)
+        window_settings.protocol('WM_DELETE_WINDOW', close_protocol)
+        window_settings.transient(self)
+        window_settings.grab_set()
 
     def cam_preview(self):
-        if not self.var_cam_state.get():
+        if not self.var_preview.get():
+            self.var_preview.set(True)
+            self.button_preview['foreground'] = 'blue'
+            self.cam_preview_update()
+        else:
+            self.var_preview.set(False)
+            self.button_preview['foreground'] = 'black'
+
+    def cam_preview_update(self):
+        if not self.var_preview.get():
+            return
+
+        if not self.cam:
             state = self.cam_start()
             if state:
                 print("Unable to start camera")
                 return
 
-        start_time = time.clock()
-        frame_dur = 1000. / self.var_fps.get()
-
-        exposure_time = frame_dur * self.var_expo.get()/100.
-        im = self.cam.grab_image(
-            vsub=subsamp[self.var_vsub.get()],
-            hsub=subsamp[self.var_hsub.get()],
-            gain=self.var_gain.get(),
-            exposure_time='{}ms'.format(exposure_time))
-        too_fast = True if time.clock() - start_time > frame_dur / 1000. else False
+        im = self.cam.latest_frame()
         self.im.set_data(im)
-        # self.ax_preview.set_ylim(0, self.cam.height)
-        # self.ax_preview.set_xlim(0, self.cam.width)
-        self.ax_preview.draw_artist(self.im)
-        self.fig_preview.canvas.blit(self.ax_preview.bbox)
+        self.canvas_preview.draw_idle()
 
-        # time_left = frame_dur / 1000. - (time.clock() - start_time)
-        # print time_left
-        # if time_left >= 0:
-        #     self.entry_status.delete(0, tk.END)
-        #     self.parent.after(int(time_left), self.refresh_preview)
-        # else:
-        #     print "too fast"
-        #     self.entry_status.delete(0, tk.END)
-        #     if too_fast:
-        #         self.entry_status.insert(0, "Recording too fast")
-        #     self.parent.after(0, self.refresh_preview)
+        # if not self.var_cam_state.get():
+        #     state = self.cam_start()
+        #     if state:
+        #         print("Unable to start camera")
+        #         return
 
-        self.parent.after(20, self.cam_preview)
+        # start_time = time.clock()
+        # frame_dur = 1000. / self.var_fps.get()
+
+        # exposure_time = frame_dur * self.var_expo.get()/100.
+        # im = self.cam.grab_image(
+        #     vsub=subsamp[self.var_vsub.get()],
+        #     hsub=subsamp[self.var_hsub.get()],
+        #     gain=self.var_gain.get(),
+        #     exposure_time='{}ms'.format(exposure_time))
+        # too_fast = True if time.clock() - start_time > frame_dur / 1000. else False
+        # self.im.set_data(im)
+        # # self.ax_preview.set_ylim(0, self.cam.height)
+        # # self.ax_preview.set_xlim(0, self.cam.width)
+        # self.ax_preview.draw_artist(self.im)
+        # self.fig_preview.canvas.blit(self.ax_preview.bbox)
+
+        self.parent.after(20, self.cam_preview_update)
 
 
     def update_ports(self):
@@ -676,6 +709,18 @@ class InputManager(tk.Frame):
     def start(self):
         self.gui_util('start')
 
+        session_length = self.parameters['session_duration']
+        nstepframes = session_length / float(self.entry_track_period.get())
+
+        # Start camera
+        self.cam.start()
+        dy = self.cam.height
+        dx = self.cam.width
+        fps = self.cam.framerate
+        nframes = fps * session_length / 1000.
+        frame_dur_s = 1. / fps
+        exposure_time = frame_dur_s * self.exposure_time.get() / 100.
+
         # Create data file
         if self.entry_save.get():
             try:
@@ -694,13 +739,30 @@ class InputManager(tk.Frame):
             filename = 'data/data-' + now.strftime('%y%m%d-%H%M%S') + '.h5'
             data_file = h5py.File(filename, 'x')
 
+        self.grp_cam = data_file.create_group('cam')
+        self.dset_ts = self.grp_cam.create_dataset('timestamps', dtype=float,
+            shape=(int(nframes * 1.1), ), chunks=(1, ))
+        self.dset_cam = self.grp_cam.create_dataset('frames', dtype='uint8',
+            shape=(int(nframes * 1.1), dy, dx), chunks=(1, dy, dx))
+        self.grp_cam.attrs['fps'] = fps
+        self.grp_cam.attrs['exposure'] = exposure_time
+        self.grp_cam.attrs['gain'] = self.var_gain.get()
+        self.grp_cam.attrs['vsub'] = self.var_vsub.get()
+        self.grp_cam.attrs['hsub'] = self.var_hsub.get()
+
         self.behav_grp = data_file.create_group('behavior')
-        self.behav_grp.create_dataset(name='trials', dtype='uint32', shape=(1000, ), chunks=(1, ))
-        self.behav_grp.create_dataset(name='trial_manual', dtype=bool, shape=(1000, ), chunks=(1, ))
-        self.behav_grp.create_dataset(name='rail_leave', dtype='uint32', shape=(1000, ), chunks=(1, ))
-        self.behav_grp.create_dataset(name='rail_home', dtype='uint32', shape=(1000, ), chunks=(1, ))
-        self.behav_grp.create_dataset(name='steps', dtype='int32', shape=(2, 36000), chunks=(2, 1))
-        self.behav_grp.create_dataset(name='track', dtype='int32', shape=(2, 36000), chunks=(2, 1))
+        self.behav_grp.create_dataset(name='trials', dtype='uint32',
+            shape=(1000, ), chunks=(1, ))
+        self.behav_grp.create_dataset(name='trial_manual', dtype=bool,
+            shape=(1000, ), chunks=(1, ))
+        self.behav_grp.create_dataset(name='rail_leave', dtype='uint32',
+            shape=(1000, ), chunks=(1, ))
+        self.behav_grp.create_dataset(name='rail_home', dtype='uint32',
+            shape=(1000, ), chunks=(1, ))
+        self.behav_grp.create_dataset(name='steps', dtype='int32',
+            shape=(2, int(nstepframes) * 1.1), chunks=(2, 1))
+        self.behav_grp.create_dataset(name='track', dtype='int32',
+            shape=(2, int(nstepframes) * 1.1), chunks=(2, 1))
         
         # Store session parameters into behavior group
         for key, value in self.parameters.iteritems():
@@ -711,7 +773,15 @@ class InputManager(tk.Frame):
             target=scan_serial,
             args=(self.q, self.ser, self.parameters, self.print_var.get()))
 
-        # # Create thread to record from camera
+        # Create thread to record from camera
+        thread_rec = threading.Thread(
+            target=record,
+            args=(
+                self.q_to_thread, self.q_from_thread, self.ts,
+                self.cam, self.dset_cam,
+                frame_dur_s, session_length)
+        )
+
         # frame_dur_s = 1. / fps
         # exposure_time = frame_dur_s * 1000 * self.var_expo.get()/100.
         # thread_rec = threading.Thread(
@@ -736,7 +806,7 @@ class InputManager(tk.Frame):
         self.ser.flushInput()                                   # Remove data from serial input
         self.ser.write('E')                                     # Start signal for Arduino
         thread_scan.start()
-        # thread_rec.start()
+        thread_rec.start()
 
         # Update GUI
         self.update_session(data_file)
