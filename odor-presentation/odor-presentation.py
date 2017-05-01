@@ -82,7 +82,7 @@ def record(q_in, q_out, ts,
         cam.wait_for_frame()
 
         # Record frame and timestamp
-        ts[f] = time.clock() - start_time
+        ts[f] = (time.clock() - start_time) * 1000
         frames[f, ...] = cam.latest_frame()
         
         # Increment timer/counter
@@ -422,7 +422,7 @@ class InputManager(tk.Frame):
         self.cam = None
         self.scale_fps = None
         self.parameters = collections.OrderedDict()
-        self.ser = serial.Serial(timeout=0, baudrate=9600)
+        self.ser = serial.Serial(timeout=1, baudrate=9600)
         self.start_time = ""
         self.counter = {}
         self.q = Queue()
@@ -688,6 +688,7 @@ class InputManager(tk.Frame):
         # Open serial and upload to Arduino
         self.ser.port = self.port_var.get()
         ser_return = start_arduino(self.ser, self.parameters)
+
         if ser_return:
             tkMessageBox.showerror("Serial error",
                                    "{0}: {1}\n\nCould not create serial connection."\
@@ -713,19 +714,19 @@ class InputManager(tk.Frame):
         nstepframes = session_length / float(self.entry_track_period.get())
 
         # Start camera
-        self.cam.start()
+        self.cam_start()
         dy = self.cam.height
         dx = self.cam.width
         fps = self.cam.framerate
         nframes = fps * session_length / 1000.
         frame_dur_s = 1. / fps
-        exposure_time = frame_dur_s * self.exposure_time.get() / 100.
+        exposure_time = frame_dur_s * self.var_expo.get() / 100.
 
         # Create data file
         if self.entry_save.get():
             try:
                 # Create file if it doesn't already exist ('x' parameter)
-                data_file = h5py.File(self.entry_save.get(), 'x')
+                self.data_file = h5py.File(self.entry_save.get(), 'x')
             except IOError:
                 tkMessageBox.showerror("File error", "Could not create file to save data.")
                 self.gui_util('stop')
@@ -737,9 +738,9 @@ class InputManager(tk.Frame):
                 os.makedirs('data')
             now = datetime.now()
             filename = 'data/data-' + now.strftime('%y%m%d-%H%M%S') + '.h5'
-            data_file = h5py.File(filename, 'x')
+            self.data_file = h5py.File(filename, 'x')
 
-        self.grp_cam = data_file.create_group('cam')
+        self.grp_cam = self.data_file.create_group('cam')
         self.dset_ts = self.grp_cam.create_dataset('timestamps', dtype=float,
             shape=(int(nframes * 1.1), ), chunks=(1, ))
         self.dset_cam = self.grp_cam.create_dataset('frames', dtype='uint8',
@@ -750,7 +751,7 @@ class InputManager(tk.Frame):
         self.grp_cam.attrs['vsub'] = self.var_vsub.get()
         self.grp_cam.attrs['hsub'] = self.var_hsub.get()
 
-        self.behav_grp = data_file.create_group('behavior')
+        self.behav_grp = self.data_file.create_group('behavior')
         self.behav_grp.create_dataset(name='trials', dtype='uint32',
             shape=(1000, ), chunks=(1, ))
         self.behav_grp.create_dataset(name='trial_manual', dtype=bool,
@@ -763,7 +764,7 @@ class InputManager(tk.Frame):
             shape=(2, int(nstepframes) * 1.1), chunks=(2, 1))
         self.behav_grp.create_dataset(name='track', dtype='int32',
             shape=(2, int(nstepframes) * 1.1), chunks=(2, 1))
-        
+
         # Store session parameters into behavior group
         for key, value in self.parameters.iteritems():
             self.behav_grp.attrs[key] = value
@@ -777,7 +778,7 @@ class InputManager(tk.Frame):
         thread_rec = threading.Thread(
             target=record,
             args=(
-                self.q_to_thread, self.q_from_thread, self.ts,
+                self.q_to_thread_rec, self.q_from_thread_rec, self.dset_ts,
                 self.cam, self.dset_cam,
                 frame_dur_s, session_length)
         )
@@ -809,9 +810,9 @@ class InputManager(tk.Frame):
         thread_rec.start()
 
         # Update GUI
-        self.update_session(data_file)
+        self.update_session()
 
-    def update_session(self, data_file):
+    def update_session(self):
         # Checks Queue for incoming data from arduino. Data arrives as comma-separated values with the first element
         # ('code') defining the type of data.
 
@@ -829,6 +830,7 @@ class InputManager(tk.Frame):
         # End on "Stop" button (by user)
         if self.stop.get():
             self.stop.set(False)
+            self.q_to_thread_rec.put(0)
             self.ser.write("0")
             print("Stopped by user.")
         elif self.manual.get():
@@ -845,7 +847,9 @@ class InputManager(tk.Frame):
 
             if code == code_end:
                 self.parameters['arduino_end'] = ts
-                self.stop_session(data_file)
+                while self.q_from_thread_rec.empty():
+                    pass
+                self.stop_session(self.q_from_thread_rec.get())
                 return
 
             elif code == code_trial_start:
@@ -903,26 +907,31 @@ class InputManager(tk.Frame):
         # if self.gui_update_ct % 5 == 0:
         #     self.plot_canvas.draw()
 
-        self.parent.after(refresh_rate, self.update_session, data_file)
+        self.parent.after(refresh_rate, self.update_session)
 
-    def stop_session(self, data_file):
+    def stop_session(self, frame_cutoff=None):
         end_time = datetime.now().strftime("%H:%M:%S")
         self.gui_util('stop')
         self.close_serial()
 
-        if data_file:
+        if self.data_file:
             self.behav_grp.attrs['end_time'] = end_time
-
-            # Truncate datasets
             self.behav_grp['trials'].resize((self.counter['trial'], ))
             self.behav_grp['trial_manual'].resize((self.counter['trial'], ))
             self.behav_grp['rail_leave'].resize((self.counter['trial'], ))
             self.behav_grp['rail_home'].resize((self.counter['trial'], ))
             self.behav_grp['steps'].resize((2, self.counter['steps']))
             self.behav_grp['track'].resize((2, self.counter['track']))
+            self.behav_grp['notes'] = self.scrolled_notes.get(1.0, tk.END)
+
+            self.grp_cam.attrs['end_time'] = end_time
+            if frame_cutoff:
+                self.grp_cam['timestamps'].resize((frame_cutoff, ))
+                _, dy, dx = self.grp_cam['frames'].shape
+                self.grp_cam['frames'].resize((frame_cutoff, dy, dx))
 
             # Close HDF5 file object
-            data_file.close()
+            self.data_file.close()
         
         # Clear self.parameters
         self.parameters = collections.OrderedDict()
