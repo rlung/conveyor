@@ -62,7 +62,6 @@ def record(q_in, q_out, ts,
 
     print("Recording...")
     start_time = time.clock()
-    # next_frame = start_time + frame_dur
     nframes = len(ts)
 
     f = 0
@@ -72,7 +71,7 @@ def record(q_in, q_out, ts,
         # Look for stop signal
         if not q_in.empty():
             if q_in.get() == 0:
-                print("Recording stopped: {}".format(time.clock() - start_time))
+                print("Camera recording stopped: {}".format(time.clock() - start_time))
                 q_out.put(f)
                 return
 
@@ -264,10 +263,12 @@ class InputManager(tk.Frame):
         debug_frame.grid(row=2, column=0, padx=px, pady=py, sticky='we')
         
         self.print_var = tk.BooleanVar()
-        self.var_sim_hardware = tk.BooleanVar()
+        self.var_sim_cam = tk.BooleanVar()
+        self.var_sim_arduino = tk.BooleanVar()
 
         self.check_print = tk.Checkbutton(debug_frame, text=" Print Arduino output", variable=self.print_var)
-        self.check_sim_hardware = tk.Checkbutton(debug_frame, text=" Simulate hardware", variable=self.var_sim_hardware)
+        self.check_sim_cam = tk.Checkbutton(debug_frame, text=" Simulate camera", variable=self.var_sim_cam)
+        self.check_sim_arduino = tk.Checkbutton(debug_frame, text=" Simulate Arduino", variable=self.var_sim_arduino)
 
         self.check_print.grid(row=0, column=0, padx=px1, pady=py1, sticky='w')
         self.check_sim_hardware.grid(row=1, column=0, padx=px1, pady=py1, sticky='w')
@@ -476,8 +477,9 @@ class InputManager(tk.Frame):
         #     return 1
 
     def cam_close(self):
-        self.cam.close()
-        self.cam = None
+        if self.cam:
+            self.cam.close()
+            self.cam = None
 
     def cam_settings(self):
         px = 15
@@ -830,7 +832,6 @@ class InputManager(tk.Frame):
         # End on "Stop" button (by user)
         if self.stop.get():
             self.stop.set(False)
-            self.q_to_thread_rec.put(0)
             self.ser.write("0")
             print("Stopped by user.")
         elif self.manual.get():
@@ -847,8 +848,9 @@ class InputManager(tk.Frame):
 
             if code == code_end:
                 self.parameters['arduino_end'] = ts
-                while self.q_from_thread_rec.empty():
-                    pass
+                self.q_to_thread_rec.put(0)
+                # while self.q_from_thread_rec.empty():
+                #     pass
                 self.stop_session(self.q_from_thread_rec.get())
                 return
 
