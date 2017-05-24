@@ -924,7 +924,7 @@ class InputManager(tk.Frame):
             self.behav_grp['rail_home'].resize((self.counter['trial'], ))
             self.behav_grp['steps'].resize((2, self.counter['steps']))
             self.behav_grp['track'].resize((2, self.counter['track']))
-            self.behav_grp['notes'] = self.scrolled_notes.get(1.0, tk.END)
+            self.behav_grp.attrs['notes'] = self.scrolled_notes.get(1.0, tk.END)
 
             self.grp_cam.attrs['end_time'] = end_time
             if frame_cutoff:
