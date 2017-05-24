@@ -271,7 +271,8 @@ class InputManager(tk.Frame):
         self.check_sim_arduino = tk.Checkbutton(debug_frame, text=" Simulate Arduino", variable=self.var_sim_arduino)
 
         self.check_print.grid(row=0, column=0, padx=px1, pady=py1, sticky='w')
-        self.check_sim_hardware.grid(row=1, column=0, padx=px1, pady=py1, sticky='w')
+        self.check_sim_cam.grid(row=1, column=0, padx=px1, pady=py1, sticky='w')
+        self.check_sim_arduino.grid(row=2, column=0, padx=px1, pady=py1, sticky='w')
 
         # Frame for file
         frame_file = tk.Frame(frame_parameter)
