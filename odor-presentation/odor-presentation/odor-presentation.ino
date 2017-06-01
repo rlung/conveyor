@@ -67,7 +67,7 @@ void endSession(unsigned long ts) {
 
   // Reset pins
   digitalWrite(imgStartPin, LOW);
-  delay(100);
+  delay(IMGPINDUR);
   digitalWrite(imgStopPin, LOW);
 
   while (1);
@@ -131,6 +131,7 @@ void setup() {
   // Set interrupt
   // Do not set earlier as track() will be called before session starts.
   attachInterrupt(digitalPinToInterrupt(trackPinA), track, RISING);
+  digitalWrite(imgStartPin, HIGH);
 }
 
 
