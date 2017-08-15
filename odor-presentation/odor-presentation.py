@@ -415,10 +415,10 @@ class InputManager(tk.Frame):
         self.button_start['state'] = 'disabled'
         self.button_stop['state'] = 'disabled'
         self.var_fps.set(5)
-        self.var_vsub.set(2)
-        self.var_hsub.set(2)
-        self.var_gain.set(10)
-        self.var_expo.set(100)
+        self.var_vsub.set(0)
+        self.var_hsub.set(0)
+        self.var_gain.set(100)
+        self.var_expo.set(25)
 
         ###### SESSION VARIABLES ######
         self.cam = None
