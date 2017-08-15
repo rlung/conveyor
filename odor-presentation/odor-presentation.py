@@ -23,6 +23,7 @@ from slacker import Slacker
 import time
 from datetime import datetime
 from datetime import timedelta
+from functools import partial
 import os
 import sys
 import h5py
@@ -33,7 +34,7 @@ from matplotlib.colors import LinearSegmentedColormap
 from matplotlib import style
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2TkAgg
 import seaborn as sns
-from PIL import Image, ImageTk
+# from PIL import Image, ImageTk
 from instrumental import instrument, list_instruments
 import pdb
 
@@ -48,10 +49,10 @@ else:
     slack = None
 
 history = 10000
-subsamp = {1: 1,
-           2: 2,
-           3: 4,
-           4: 8}
+# subsamp = {1: 1,
+#            2: 2,
+#            3: 4,
+#            4: 8}
 
 
 def record(q_in, q_out, ts,
@@ -270,8 +271,9 @@ class InputManager(tk.Frame):
         self.check_sim_cam = tk.Checkbutton(debug_frame, text=" Simulate camera", variable=self.var_sim_cam)
         self.check_sim_arduino = tk.Checkbutton(debug_frame, text=" Simulate Arduino", variable=self.var_sim_arduino)
 
-        self.check_print.grid(row=0, column=0, padx=px1, pady=py1, sticky='w')
-        self.check_sim_hardware.grid(row=1, column=0, padx=px1, pady=py1, sticky='w')
+        self.check_print.grid(row=0, column=0, padx=px1, sticky='w')
+        self.check_sim_cam.grid(row=1, column=0, padx=px1, sticky='w')
+        self.check_sim_arduino.grid(row=2, column=0, padx=px1, sticky='w')
 
         # Frame for file
         frame_file = tk.Frame(frame_parameter)
@@ -451,14 +453,23 @@ class InputManager(tk.Frame):
             else:
                 return 1
 
+        aoi_dy = 2
+        aoi_dx = 4
+        dim_y, dim_x = (1024, 1280)
+        dy = self.var_vsub.get() * aoi_dy
+        dx = self.var_hsub.get() * aoi_dx
         fps = self.var_fps.get()
         expo = self.var_expo.get()
         exposure_time = (1000. / fps) * (expo / 100.)
 
         self.cam.start_live_video(
             framerate='{}Hz'.format(fps),
-            vsub=subsamp[self.var_vsub.get()],
-            hsub=subsamp[self.var_hsub.get()],
+            # vsub=int(self.var_vsub.get()),
+            # hsub=int(self.var_hsub.get()),
+            top=dy,
+            bot=dim_y - dy,
+            left=dx,
+            right=dim_x - dx,
             gain=self.var_gain.get(),
             exposure_time='{}ms'.format(exposure_time)
         )
@@ -481,9 +492,32 @@ class InputManager(tk.Frame):
             self.cam.close()
             self.cam = None
 
+    # TODO: need to limit scale to step size and range of camera
+    # def scale(self, dim):
+    #     pdb.set_trace()
+
+    #     if dim == 'x':
+    #         slider = self.scale_hsub
+    #         slider_var = self.var_hsub
+    #     elif dim == 'y':
+    #         slider = self.scale_vsub
+    #         slider_var = self.var_vsub
+
+    #     old_val = slider.get()
+    #     new_val = step_size * np.round(old_val / step_size)
+
+    #     slider.set(new_val)
+    #     slider_var.set(new_val)
+
     def cam_settings(self):
         px = 15
         py = 5
+
+        dy, dx = (1024, 1280)
+        aoi_x = 624
+        aoi_y = 510
+        aoi_dx = 4
+        aoi_dy = 2
 
         window_settings = tk.Toplevel(self)
         window_settings.wm_title("Camera settings")
@@ -498,9 +532,9 @@ class InputManager(tk.Frame):
         tk.Label(frame_settings, text="Exposure (% of frame): ", anchor='e').grid(row=5, column=0, sticky='e')
         self.scale_fps = tk.Scale(frame_settings, orient='horizontal', from_=1, to=60,
             command=self.var_fps.set, resolution=0.01)
-        scale_vsub = tk.Scale(frame_settings, orient='horizontal', from_=1, to=4,
+        scale_vsub = tk.Scale(frame_settings, orient='horizontal', from_=0, to=aoi_y / aoi_dy,
             command=self.var_vsub.set)
-        scale_hsub = tk.Scale(frame_settings, orient='horizontal', from_=1, to=4,
+        scale_hsub = tk.Scale(frame_settings, orient='horizontal', from_=0, to=aoi_x / aoi_dx,
             command=self.var_hsub.set)
         scale_gain = tk.Scale(frame_settings, orient='horizontal', from_=0, to=100,
             command=self.var_gain.set)
