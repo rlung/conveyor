@@ -23,7 +23,6 @@ from slacker import Slacker
 import time
 from datetime import datetime
 from datetime import timedelta
-from functools import partial
 import os
 import sys
 import h5py
@@ -564,6 +563,9 @@ class InputManager(tk.Frame):
         window_settings.grab_set()
 
     def cam_preview(self):
+        # Toggle preview on or off
+        # Depends on state of `self.var_preview`
+        
         if not self.var_preview.get():
             self.var_preview.set(True)
             self.button_preview['foreground'] = 'blue'
@@ -571,17 +573,21 @@ class InputManager(tk.Frame):
         else:
             self.var_preview.set(False)
             self.button_preview['foreground'] = 'black'
+            self.cam_close()
 
     def cam_preview_update(self):
+        # Check if preview mode is still active
         if not self.var_preview.get():
             return
 
+        # Turn on camera
         if not self.cam:
             state = self.cam_start()
             if state:
                 print("Unable to start camera")
                 return
 
+        # Get frame
         im = self.cam.latest_frame()
         self.im.set_data(im)
         self.canvas_preview.draw_idle()
