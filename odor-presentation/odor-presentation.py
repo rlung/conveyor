@@ -28,6 +28,7 @@ import sys
 import h5py
 import numpy as np
 # import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
 import matplotlib.animation as animation
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib import style
