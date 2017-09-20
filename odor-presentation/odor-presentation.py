@@ -8,8 +8,8 @@ imaging. Script interfaces with Arduino microcontroller and imaging devices.
 """
 # import os
 # if os.name == 'nt':
-#     import matplotlib
-#     matplotlib.use('GTKAgg')
+import matplotlib
+matplotlib.use('TKAgg')
 import Tkinter as tk
 import tkMessageBox
 import tkFileDialog
@@ -33,7 +33,7 @@ from matplotlib.colors import LinearSegmentedColormap
 from matplotlib import style
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2TkAgg
 import seaborn as sns
-from PIL import Image, ImageTk
+# from PIL import Image, ImageTk
 from instrumental import instrument, list_instruments
 import pdb
 
@@ -48,10 +48,10 @@ else:
     slack = None
 
 history = 10000
-subsamp = {1: 1,
-           2: 2,
-           3: 4,
-           4: 8}
+# subsamp = {1: 1,
+#            2: 2,
+#            3: 4,
+#            4: 8}
 
 
 def record(q_in, q_out, ts,
@@ -88,7 +88,7 @@ def record(q_in, q_out, ts,
         # next_frame += frame_dur
         f += 1
 
-    print("Recording time: {}".format(time.clock() - start_time))
+    print("Recording limit reached: {}".format(time.clock() - start_time))
     q_out.put(f)
 
 
@@ -271,9 +271,12 @@ class InputManager(tk.Frame):
         self.check_print = tk.Checkbutton(debug_frame, text=" Print Arduino output", variable=self.print_var)
         self.check_sim_cam = tk.Checkbutton(debug_frame, text=" Simulate camera", variable=self.var_sim_cam)
         self.check_sim_arduino = tk.Checkbutton(debug_frame, text=" Simulate Arduino", variable=self.var_sim_arduino)
+        self.pdb = tk.Button(debug_frame, text="pdb", command=pdb.set_trace)
 
-        self.check_print.grid(row=0, column=0, padx=px1, pady=py1, sticky='w')
-        self.check_sim_hardware.grid(row=1, column=0, padx=px1, pady=py1, sticky='w')
+        self.check_print.grid(row=0, column=0, padx=px1, sticky='w')
+        self.check_sim_cam.grid(row=1, column=0, padx=px1, sticky='w')
+        self.check_sim_arduino.grid(row=2, column=0, padx=px1, sticky='w')
+        self.pdb.grid(row=3, column=0, padx=px1, sticky='w')
 
         # Frame for file
         frame_file = tk.Frame(frame_parameter)
@@ -417,11 +420,11 @@ class InputManager(tk.Frame):
         self.button_close_port['state'] = 'disabled'
         self.button_start['state'] = 'disabled'
         self.button_stop['state'] = 'disabled'
-        self.var_fps.set(5)
-        self.var_vsub.set(2)
-        self.var_hsub.set(2)
-        self.var_gain.set(10)
-        self.var_expo.set(100)
+        self.var_fps.set(10)
+        self.var_vsub.set(50)
+        self.var_hsub.set(50)
+        self.var_gain.set(15)
+        self.var_expo.set(40)
 
         ###### SESSION VARIABLES ######
         self.cam = None
@@ -436,33 +439,53 @@ class InputManager(tk.Frame):
         self.gui_update_ct = 0  # count number of times GUI has been updated
 
     def update_instruments(self):
+        self.instrs = {}
         instrs = list_instruments()
         menu = self.option_instr['menu']
         menu.delete(0, tk.END)
         if instrs:
             for instr in instrs:
                 menu.add_command(label=instr.name, command=lambda x=instr.name: self.var_instr.set(x))
+                self.instrs[instr.name] = instr
             self.var_instr.set(instrs[0].name)
         else:
             self.var_instr.set("No instruments found")
+            self.instrs = {}
 
     def cam_start(self):
+        # if not self.cam:
+        #     instrs = list_instruments()
+        #     instr = [x for x in instrs if x.name == self.var_instr.get()]
+        #     if instr:
+        #         self.cam = instrument(instr[0])
+        #     else:
+        #         return 1
+
         if not self.cam:
-            instrs = list_instruments()
-            instr = [x for x in instrs if x.name == self.var_instr.get()]
-            if instr:
-                self.cam = instrument(instr[0])
+            cam_name = self.var_instr.get()
+            if cam_name:
+                self.cam = instrument(self.instrs[cam_name])
             else:
+                print("No camera selected.")
                 return 1
 
+        aoi_dy = 2
+        aoi_dx = 4
+        dim_y, dim_x = (1024, 1280)
+        dy = self.var_vsub.get() * aoi_dy
+        dx = self.var_hsub.get() * aoi_dx
         fps = self.var_fps.get()
         expo = self.var_expo.get()
         exposure_time = (1000. / fps) * (expo / 100.)
 
         self.cam.start_live_video(
             framerate='{}Hz'.format(fps),
-            vsub=subsamp[self.var_vsub.get()],
-            hsub=subsamp[self.var_hsub.get()],
+            # vsub=int(self.var_vsub.get()),
+            # hsub=int(self.var_hsub.get()),
+            top=dy,
+            bot=dim_y - dy,
+            left=dx,
+            right=dim_x - dx,
             gain=self.var_gain.get(),
             exposure_time='{}ms'.format(exposure_time)
         )
@@ -482,12 +505,36 @@ class InputManager(tk.Frame):
 
     def cam_close(self):
         if self.cam:
+            print("Closing camera")
             self.cam.close()
             self.cam = None
+
+    # TODO: need to limit scale to step size and range of camera
+    # def scale(self, dim):
+    #     pdb.set_trace()
+
+    #     if dim == 'x':
+    #         slider = self.scale_hsub
+    #         slider_var = self.var_hsub
+    #     elif dim == 'y':
+    #         slider = self.scale_vsub
+    #         slider_var = self.var_vsub
+
+    #     old_val = slider.get()
+    #     new_val = step_size * np.round(old_val / step_size)
+
+    #     slider.set(new_val)
+    #     slider_var.set(new_val)
 
     def cam_settings(self):
         px = 15
         py = 5
+
+        dy, dx = (1024, 1280)
+        aoi_x = 624
+        aoi_y = 510
+        aoi_dx = 4
+        aoi_dy = 2
 
         window_settings = tk.Toplevel(self)
         window_settings.wm_title("Camera settings")
@@ -502,9 +549,9 @@ class InputManager(tk.Frame):
         tk.Label(frame_settings, text="Exposure (% of frame): ", anchor='e').grid(row=5, column=0, sticky='e')
         self.scale_fps = tk.Scale(frame_settings, orient='horizontal', from_=1, to=60,
             command=self.var_fps.set, resolution=0.01)
-        scale_vsub = tk.Scale(frame_settings, orient='horizontal', from_=1, to=4,
+        scale_vsub = tk.Scale(frame_settings, orient='horizontal', from_=0, to=aoi_y / aoi_dy,
             command=self.var_vsub.set)
-        scale_hsub = tk.Scale(frame_settings, orient='horizontal', from_=1, to=4,
+        scale_hsub = tk.Scale(frame_settings, orient='horizontal', from_=0, to=aoi_x / aoi_dx,
             command=self.var_hsub.set)
         scale_gain = tk.Scale(frame_settings, orient='horizontal', from_=0, to=100,
             command=self.var_gain.set)
@@ -534,6 +581,9 @@ class InputManager(tk.Frame):
         window_settings.grab_set()
 
     def cam_preview(self):
+        # Toggle preview on or off
+        # Depends on state of `self.var_preview`
+        
         if not self.var_preview.get():
             self.var_preview.set(True)
             self.button_preview['foreground'] = 'blue'
@@ -541,17 +591,21 @@ class InputManager(tk.Frame):
         else:
             self.var_preview.set(False)
             self.button_preview['foreground'] = 'black'
+            self.cam_close()
 
     def cam_preview_update(self):
+        # Check if preview mode is still active
         if not self.var_preview.get():
             return
 
+        # Turn on camera
         if not self.cam:
             state = self.cam_start()
             if state:
                 print("Unable to start camera")
                 return
 
+        # Get frame
         im = self.cam.latest_frame()
         self.im.set_data(im)
         self.canvas_preview.draw_idle()
@@ -596,6 +650,10 @@ class InputManager(tk.Frame):
             self.port_var.set("No ports found")
 
     def get_save_file(self):
+        ''' Opens prompt for file for data to be saved
+        Runs when button beside save file is pressed.
+        '''
+
         save_file = tkFileDialog.asksaveasfilename(
             defaultextension=".h5",
             filetypes=[
@@ -607,8 +665,9 @@ class InputManager(tk.Frame):
         self.entry_save.insert(0, save_file)
 
     def gui_util(self, option):
-        # Updates GUI components.
-        # Enable and disable components based on events.
+        ''' Updates GUI components
+        Enable and disable components based on events to prevent bad stuff.
+        '''
 
         if option == 'open':
             for i, obj in enumerate(self.obj_to_disable_at_open):
@@ -665,7 +724,9 @@ class InputManager(tk.Frame):
             self.entry_serial_status['state'] = 'readonly'
 
     def open_serial(self):
-        # Executes when "Open" is pressed
+        ''' Open serial connection to Arduino
+        Executes when "Open" is pressed
+        '''
 
         # Disable GUI components
         self.gui_util('open')
@@ -697,11 +758,11 @@ class InputManager(tk.Frame):
 
         if ser_return:
             tkMessageBox.showerror("Serial error",
-                                   "{0}: {1}\n\nCould not create serial connection."\
+                                   "{}: {}\n\nCould not create serial connection."\
                                    .format(ser_return.errno, ser_return.strerror))
-            print "\n{0}: {1}\nCould not create serial connection. Check port is open."\
+            print "\n{}: {}\nCould not create serial connection. Check port is open."\
                   .format(ser_return.errno, ser_return.strerror)
-            self.close_serial  ## MIGHT NOT WORK BC SERIAL DIDN'T OPEN...
+            self.close_serial()
             self.gui_util('close')
             return
 
@@ -709,12 +770,19 @@ class InputManager(tk.Frame):
         print "Waiting for start command."
     
     def close_serial(self):
+        ''' Close serial connection to Arduino '''
+
         self.ser.close()
         self.gui_util('close')
         print "Connection to Arduino closed."
     
     def start(self):
         self.gui_util('start')
+
+        # Clear Queues
+        for q in [self.q, self.q_to_thread_rec, self.q_from_thread_rec]:
+            with q.mutex:
+                q.queue.clear()
 
         session_length = self.parameters['session_duration']
         nstepframes = session_length / float(self.entry_track_period.get())
@@ -778,7 +846,7 @@ class InputManager(tk.Frame):
         # Create thread to scan serial
         thread_scan = threading.Thread(
             target=scan_serial,
-            args=(self.q, self.ser, self.parameters, self.print_var.get()))
+            args=(self.q, self.q_to_thread_rec, self.ser, self.parameters, self.print_var.get()))
 
         # Create thread to record from camera
         thread_rec = threading.Thread(
@@ -803,7 +871,7 @@ class InputManager(tk.Frame):
 
         # Run session
         start_time = datetime.now()
-        approx_end = start_time + timedelta(milliseconds=self.parameters['trial_duration'])
+        approx_end = start_time + timedelta(milliseconds=self.parameters['session_duration'])
         self.start_time = start_time.strftime("%H:%M:%S")
         print("Session start ~ {}".format(self.start_time))
         self.entry_start.insert(0, self.start_time)
@@ -837,7 +905,7 @@ class InputManager(tk.Frame):
         if self.stop.get():
             self.stop.set(False)
             self.ser.write("0")
-            print("Stopped by user.")
+            print("User triggered stop.")
         elif self.manual.get():
             self.manual.set(False)
             self.ser.write("F")
@@ -850,12 +918,14 @@ class InputManager(tk.Frame):
             code = q_in[0]
             ts = q_in[1]
 
+            # stop_session is called only when Arduino sends stop code
             if code == code_end:
-                self.parameters['arduino_end'] = ts
+                arduino_end = ts
                 self.q_to_thread_rec.put(0)
                 # while self.q_from_thread_rec.empty():
                 #     pass
-                self.stop_session(self.q_from_thread_rec.get())
+                print("Stopping session.")
+                self.stop_session(self.q_from_thread_rec.get(), arduino_end)
                 return
 
             elif code == code_trial_start:
@@ -884,24 +954,24 @@ class InputManager(tk.Frame):
                 # Record tracking
                 self.behav_grp['track'][:, self.counter['track']] = [ts, dist]
 
-                # Update plot
-                x0 = ts - history
-                X, Y = self.vel_trace.get_data()
-                X = np.append(X, ts)
-                Y = np.append(Y, dist)
-                recent_pts = X >= x0
+                # # Update plot
+                # x0 = ts - history
+                # X, Y = self.vel_trace.get_data()
+                # X = np.append(X, ts)
+                # Y = np.append(Y, dist)
+                # recent_pts = X >= x0
 
-                if any(recent_pts):
-                    X = X[recent_pts]
-                    Y = Y[recent_pts]
+                # if any(recent_pts):
+                #     X = X[recent_pts]
+                #     Y = Y[recent_pts]
 
-                    self.vel_trace.set_data(X, Y)
-                    self.ax.set_xlim(x0, ts)
+                #     self.vel_trace.set_data(X, Y)
+                #     self.ax.set_xlim(x0, ts)
 
-                    # self.ax.draw_artist(self.vel_trace)
-                    # self.fig.canvas.blit(self.ax.bbox)
-                    # self.fig.canvas.show()
-                    self.fig.canvas.draw_idle()
+                #     # self.ax.draw_artist(self.vel_trace)
+                #     # self.fig.canvas.blit(self.ax.bbox)
+                #     # self.fig.canvas.show()
+                #     self.fig.canvas.draw_idle()
 
                 # Increment counter
                 self.counter['track'] += 1
@@ -915,12 +985,15 @@ class InputManager(tk.Frame):
 
         self.parent.after(refresh_rate, self.update_session)
 
-    def stop_session(self, frame_cutoff=None):
+    def stop_session(self, frame_cutoff=None, arduino_end=None):
         end_time = datetime.now().strftime("%H:%M:%S")
+        print "Session ended at " + end_time
         self.gui_util('stop')
         self.close_serial()
+        self.cam_close()
 
         if self.data_file:
+            print("Writing behavioral data")
             self.behav_grp.attrs['end_time'] = end_time
             self.behav_grp['trials'].resize((self.counter['trial'], ))
             self.behav_grp['trial_manual'].resize((self.counter['trial'], ))
@@ -929,20 +1002,23 @@ class InputManager(tk.Frame):
             self.behav_grp['steps'].resize((2, self.counter['steps']))
             self.behav_grp['track'].resize((2, self.counter['track']))
             self.behav_grp.attrs['notes'] = self.scrolled_notes.get(1.0, tk.END)
+            self.behav_grp.attrs['arduino_end'] = arduino_end
 
             self.grp_cam.attrs['end_time'] = end_time
             if frame_cutoff:
+                print("Trimming recording")
                 self.grp_cam['timestamps'].resize((frame_cutoff, ))
                 _, dy, dx = self.grp_cam['frames'].shape
                 self.grp_cam['frames'].resize((frame_cutoff, dy, dx))
 
             # Close HDF5 file object
+            print("Closing file")
             self.data_file.close()
         
         # Clear self.parameters
         self.parameters = collections.OrderedDict()
 
-        print "Session ended at " + end_time
+        print("All done!")
 
         # Slack that session is done.
         if (self.entry_slack.get() and \
@@ -1001,26 +1077,27 @@ def start_arduino(ser, parameters):
         sys.stdout.write("\nFailed to open connection.\n")
         return err
 
-    # WAIT FOR ARDUINO TO ESTABLISH SERIAL CONNECTION
-    timeout = 10
+    # Wait for connection to Arduino
+    timeout = 5
     timeout_count = 0
     while 1:
         if timeout_count >= timeout:
-            sys.stdout.write(" connection timed out.\n")
+            sys.stdout.write(" Startup prompt not found.\n")
             sys.stdout.flush()
-            return serial.SerialException
+            return serial.SerialException("Startup prompt not found.")
         sys.stdout.write(".")
         sys.stdout.flush()
         if ser.read(): break
         timeout_count += 1
 
+    # Write parameters to Arduino
     ser.flushInput()            # Remove opening message from serial
     ser.write('+'.join(str(s) for s in values))
     while 1:
         if timeout_count >= timeout:
-            sys.stdout.write(" connection timed out.\n")
+            sys.stdout.write(" Start signal from Arduino timed out.\n")
             sys.stdout.flush()
-            return serial.SerialException
+            return serial.SerialException("Start signal from Arduino timed out.")
         sys.stdout.write(".")
         sys.stdout.flush()
         if ser.read(): break
@@ -1029,7 +1106,7 @@ def start_arduino(ser, parameters):
     return 0
 
 
-def scan_serial(q, ser, parameters, print_arduino=False):
+def scan_serial(q, q_to_rec_thread, ser, parameters, print_arduino=False):
     #  Continually check serial connection for data sent from Arduino. Stop when "0 code" is received.
 
     code_end = 0
@@ -1047,7 +1124,8 @@ def scan_serial(q, ser, parameters, print_arduino=False):
             pass
         else:
             if input_arduino: q.put(input_split)
-            if input_split[0] == code_end: 
+            if input_split[0] == code_end:
+                q_to_rec_thread.put(0)
                 if print_arduino: print "  Scan complete."
                 return
 
