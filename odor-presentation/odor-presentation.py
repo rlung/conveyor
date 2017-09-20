@@ -27,7 +27,7 @@ import os
 import sys
 import h5py
 import numpy as np
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib import style
@@ -142,7 +142,9 @@ class InputManager(tk.Frame):
         self.frame_preview = tk.Frame(session_frame)
         self.frame_preview.grid(row=0, column=0, sticky='wens')
 
-        self.fig_preview, self.ax_preview = plt.subplots(figsize=(1280./1024 * 2.5, 2.5))
+        # self.fig_preview, self.ax_preview = plt.subplots(figsize=(1280./1024 * 2.5, 2.5))
+        self.fig_preview = Figure(figsize=(1280./1024 * 2.5, 2.5))
+        self.ax_preview = self.fig_preview.add_axes([0, 0, 1, 1])
         self.fig_preview.subplots_adjust(left=0, bottom=0, right=1, top=1, wspace=0, hspace=0)
         self.im = self.ax_preview.imshow(np.zeros((1024, 1280)), vmin=1, vmax=254, cmap='gray', interpolation='none')
         self.im.cmap.set_under('b')
@@ -337,7 +339,9 @@ class InputManager(tk.Frame):
         sns.set_style('dark')
         self.color_vel = 'darkslategray'
 
-        self.fig, self.ax = plt.subplots(figsize=(8, 2))
+        # self.fig, self.ax = plt.subplots(figsize=(8, 2))
+        self.fig = Figure(figsize=(8, 2))
+        self.ax = self.fig.add_subplot(1, 1, 1)
         self.ax.set_xlabel("Trial time (ms)")
         self.ax.set_ylabel("Relative velocity")
         self.ax.set_xlim(0, history)
